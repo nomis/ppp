@@ -364,6 +364,13 @@ main(argc, argv)
 		usage();
 	    break;
 
+	case 'L':
+	    if ((arg = OPTARG(argc, argv)) != NULL)
+		program_name = copy_of(arg);
+	    else
+		usage();
+	    break;
+
 	default:
 	    usage();
 	    break;
@@ -377,9 +384,9 @@ main(argc, argv)
 
     if (to_log) {
 #ifdef ultrix
-	openlog("chat", LOG_PID);
+	openlog(program_name, LOG_PID);
 #else
-	openlog("chat", LOG_PID | LOG_NDELAY, LOG_LOCAL2);
+	openlog(program_name, LOG_PID | LOG_NDELAY, LOG_LOCAL2);
 
 	if (verbose)
 	    setlogmask(LOG_UPTO(LOG_INFO));
