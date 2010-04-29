@@ -325,6 +325,7 @@ main(argc, argv)
     new_phase(PHASE_INITIALIZE);
 
     script_env = NULL;
+    progname = *argv;
 
     /* Initialize syslog facilities */
     reopen_log();
@@ -361,8 +362,6 @@ main(argc, argv)
      * Initialize the default channel.
      */
     tty_init();
-
-    progname = *argv;
 
     /*
      * Parse, in order, the system options file, the user's options file,
@@ -800,7 +799,7 @@ detach()
 void
 reopen_log()
 {
-    openlog("pppd", LOG_PID | LOG_NDELAY, LOG_PPP);
+    openlog(progname, LOG_PID | LOG_NDELAY, LOG_PPP);
     setlogmask(LOG_UPTO(LOG_INFO));
 }
 
