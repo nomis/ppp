@@ -455,7 +455,7 @@ main(argc, argv)
      */
     if (!nodetach && !updetach)
 	detach();
-    p = getlogin();
+    p = NULL;
     if (p == NULL) {
 	pw = getpwuid(uid);
 	if (pw != NULL && pw->pw_name != NULL)
