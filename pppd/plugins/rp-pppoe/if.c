@@ -155,6 +155,8 @@ openInterface(char const *ifname, UINT16_t type, unsigned char *hwaddr)
     strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
     if (ioctl(fd, SIOCGIFMTU, &ifr) < 0) {
 	error("Can't get MTU for %s: %m", ifname);
+	close(fd);
+	return -1;
     } else if (ifr.ifr_mtu < ETH_DATA_LEN) {
 	error("Interface %.16s has MTU of %d -- should be at least %d.",
 	      ifname, ifr.ifr_mtu, ETH_DATA_LEN);
