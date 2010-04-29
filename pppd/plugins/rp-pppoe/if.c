@@ -76,7 +76,7 @@ etherType(PPPoEPacket *packet)
 {
     UINT16_t type = (UINT16_t) ntohs(packet->ethHdr.h_proto);
     if (type != Eth_PPPOE_Discovery && type != Eth_PPPOE_Session) {
-	error("Invalid ether type 0x%x", type);
+	error("Invalid ether type 0x%04x", type);
     }
     return type;
 }

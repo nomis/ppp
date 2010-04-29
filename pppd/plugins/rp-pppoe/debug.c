@@ -103,11 +103,11 @@ dumpPacket(FILE *fp, PPPoEPacket *packet, char const *dir)
     strftime(timebuf, 256, "%H:%M:%S", lt);
     fprintf(fp, "%s.%03d %s PPPoE ", timebuf, millisec, dir);
     if (type == Eth_PPPOE_Discovery) {
-	fprintf(fp, "Discovery (%x) ", (unsigned) type);
+	fprintf(fp, "Discovery (0x%04x) ", (unsigned) type);
     } else if (type == Eth_PPPOE_Session) {
-	fprintf(fp, "Session (%x) ", (unsigned) type);
+	fprintf(fp, "Session (0x%04x) ", (unsigned) type);
     } else {
-	fprintf(fp, "Unknown (%x) ", (unsigned) type);
+	fprintf(fp, "Unknown (0x%04x) ", (unsigned) type);
     }
 
     switch(packet->code) {

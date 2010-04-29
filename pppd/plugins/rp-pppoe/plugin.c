@@ -200,7 +200,7 @@ PPPOEConnectDevice(void)
     memcpy(sp.sa_addr.pppoe.remote, conn->peerEth, ETH_ALEN);
 
     /* Set remote_number for ServPoET */
-    sprintf(remote_number, "%02X:%02X:%02X:%02X:%02X:%02X",
+    sprintf(remote_number, "%02x:%02x:%02x:%02x:%02x:%02x",
 	    (unsigned) conn->peerEth[0],
 	    (unsigned) conn->peerEth[1],
 	    (unsigned) conn->peerEth[2],
@@ -208,7 +208,7 @@ PPPOEConnectDevice(void)
 	    (unsigned) conn->peerEth[4],
 	    (unsigned) conn->peerEth[5]);
 
-    warn("Connected to %02X:%02X:%02X:%02X:%02X:%02X via interface %s",
+    warn("Connected to %02x:%02x:%02x:%02x:%02x:%02x via interface %s",
 	 (unsigned) conn->peerEth[0],
 	 (unsigned) conn->peerEth[1],
 	 (unsigned) conn->peerEth[2],
