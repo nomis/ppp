@@ -80,6 +80,7 @@ static struct chap_client_state {
 	char *name;
 	struct chap_digest_type *digest;
 	unsigned char priv[64];		/* private area for digest's use */
+	unsigned long long ts;
 } client;
 
 /*
@@ -142,6 +143,7 @@ chap_init(int unit)
 {
 	memset(&client, 0, sizeof(client));
 	memset(&server, 0, sizeof(server));
+	client.ts = 0;
 
 	chap_md5_init();
 #ifdef CHAPMS
@@ -441,6 +443,7 @@ chap_respond(struct chap_client_state *cs, int id,
 	unsigned char response[RESP_MAX_PKTLEN];
 	char rname[MAXNAMELEN+1];
 	char secret[MAXSECRETLEN+1];
+	struct timeval tv;
 
 	if ((cs->flags & (LOWERUP | AUTH_STARTED)) != (LOWERUP | AUTH_STARTED))
 		return;		/* not ready */
@@ -448,6 +451,10 @@ chap_respond(struct chap_client_state *cs, int id,
 		return;		/* too short */
 	clen = pkt[0];
 	nlen = len - (clen + 1);
+
+	tv.tv_sec = tv.tv_usec = cs->ts = 0;
+	if (gettimeofday(&tv, NULL) == 0)
+		cs->ts = (unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec;
 
 	/* Null terminate and clean remote name. */
 	slprintf(rname, sizeof(rname), "%.*v", nlen, pkt + clen + 1);
@@ -489,11 +496,19 @@ chap_handle_status(struct chap_client_state *cs, int code, int id,
 		   unsigned char *pkt, int len)
 {
 	const char *msg = NULL;
+	struct timeval tv;
 
 	if ((cs->flags & (AUTH_DONE|AUTH_STARTED|LOWERUP))
 	    != (AUTH_STARTED|LOWERUP))
 		return;
 	cs->flags |= AUTH_DONE;
+
+	tv.tv_sec = tv.tv_usec = 0;
+	if (cs->ts != 0 && gettimeofday(&tv, NULL) == 0)
+		cs->ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec) - cs->ts;
+	else
+		cs->ts = 0;
+	len = 0;
 
 	if (code == CHAP_SUCCESS) {
 		/* used for MS-CHAP v2 mutual auth, yuck */
@@ -509,11 +524,19 @@ chap_handle_status(struct chap_client_state *cs, int code, int id,
 			msg = "CHAP authentication failed";
 	}
 	if (msg) {
-		if (len > 0)
-			info("%s: %.*v", msg, len, pkt);
-		else
-			info("%s", msg);
+		if (cs->ts <= 0) {
+			if (len > 0)
+				info("%s: %.*v", msg, len, pkt);
+			else
+				info("%s", msg);
+		} else {
+			if (len > 0)
+				info("%s: %.*v (%s in %lu.%06lus)", msg, len, pkt, cs->name, (unsigned long)(cs->ts/1000000), (unsigned long)(cs->ts%1000000));
+			else
+				info("%s (%s in %lu.%06lus)", msg, cs->name, (unsigned long)(cs->ts/1000000), (unsigned long)(cs->ts%1000000));
+		}
 	}
+	cs->ts = 0;
 	if (code == CHAP_SUCCESS)
 		auth_withpeer_success(0, PPP_CHAP, cs->digest->code);
 	else {

@@ -306,6 +306,8 @@ static void ipv6cp_script_done __P((void *));
 #define CODENAME(x)	((x) == CONFACK ? "ACK" : \
 			 (x) == CONFNAK ? "NAK" : "REJ")
 
+static unsigned long long ts = 0;
+
 /*
  * This state variable is used to ensure that we don't
  * run an ipcp-up/down script while one is already running.
@@ -1173,8 +1175,20 @@ ipv6cp_up(f)
     ipv6cp_options *ho = &ipv6cp_hisoptions[f->unit];
     ipv6cp_options *go = &ipv6cp_gotoptions[f->unit];
     ipv6cp_options *wo = &ipv6cp_wantoptions[f->unit];
+	struct timeval tv;
 
-    IPV6CPDEBUG(("ipv6cp: up"));
+	IPV6CPDEBUG(("ipv6cp: up"));
+
+	tv.tv_sec = tv.tv_usec = 0;
+//	IPV6CPDEBUG(("ipv6cp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned int)(ts/1000000), (unsigned int)(ts%1000000)));
+	if (gettimeofday(&tv, NULL) == 0) {
+		if (ts > 0 && (ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec) - ts) > 0)
+			info("IPV6CP was down for %lu.%06lus", (unsigned long)(ts/1000000), (unsigned long)(ts%1000000));
+//		IPV6CPDEBUG(("ipv6cp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned int)(ts/1000000), (unsigned int)(ts%1000000)));
+		ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec);
+	} else
+		ts = 0;
+//	IPV6CPDEBUG(("ipv6cp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned int)(ts/1000000), (unsigned int)(ts%1000000)));
 
     /*
      * We must have a non-zero LL address for both ends of the link.
@@ -1303,7 +1317,21 @@ static void
 ipv6cp_down(f)
     fsm *f;
 {
+	struct timeval tv;
+
     IPV6CPDEBUG(("ipv6cp: down"));
+
+	tv.tv_sec = tv.tv_usec = 0;
+//	IPV6CPDEBUG(("ipv6cp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned int)(ts/1000000), (unsigned int)(ts%1000000)));	
+	if (gettimeofday(&tv, NULL) == 0) {
+		if (ts > 0 && (ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec) - ts) > 0)
+			info("IPV6CP was up for %lu.%06lus", (unsigned long)(ts/1000000), (unsigned long)(ts%1000000));
+//		IPV6CPDEBUG(("ipv6cp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned int)(ts/1000000), (unsigned int)(ts%1000000)));	
+		ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec);
+	} else
+		ts = 0;
+//	IPV6CPDEBUG(("ipv6cp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned int)(ts/1000000), (unsigned int)(ts%1000000)));	
+
     update_link_stats(f->unit);
     if (ipv6cp_is_up) {
 	ipv6cp_is_up = 0;
