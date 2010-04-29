@@ -10,7 +10,6 @@ PPPSTATSRCS = pppstats.c
 PPPSTATOBJS = pppstats.o
 
 #CC = gcc
-COPTS = -O
 COMPILE_FLAGS = -I../include
 LIBS =
 
@@ -26,7 +25,7 @@ install: pppstats
 	$(INSTALL) -c -m 444 pppstats.8 $(MANDIR)
 
 pppstats: $(PPPSTATSRCS)
-	$(CC) $(CFLAGS) -o pppstats pppstats.c $(LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o pppstats pppstats.c $(LIBS)
 
 clean:
 	rm -f pppstats *~ #* core
