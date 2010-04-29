@@ -373,7 +373,7 @@ setdnsaddr(argv)
     /* We take the last 2 values given, the 2nd-last as the primary
        and the last as the secondary.  If only one is given it
        becomes both primary and secondary. */
-    if (ipcp_allowoptions[0].dnsaddr[1] == 0)
+    if (ipcp_allowoptions[0].dnsaddr[1] == (u_int32_t) -1)
 	ipcp_allowoptions[0].dnsaddr[0] = dns;
     else
 	ipcp_allowoptions[0].dnsaddr[0] = ipcp_allowoptions[0].dnsaddr[1];
@@ -409,7 +409,7 @@ setwinsaddr(argv)
     /* We take the last 2 values given, the 2nd-last as the primary
        and the last as the secondary.  If only one is given it
        becomes both primary and secondary. */
-    if (ipcp_allowoptions[0].winsaddr[1] == 0)
+    if (ipcp_allowoptions[0].winsaddr[1] == (u_int32_t) -1)
 	ipcp_allowoptions[0].winsaddr[0] = wins;
     else
 	ipcp_allowoptions[0].winsaddr[0] = ipcp_allowoptions[0].winsaddr[1];
@@ -668,6 +668,11 @@ ipcp_init(unit)
      */
     ao->proxy_arp = 1;
     ao->default_route = 1;
+
+	ao->dnsaddr[0] = (u_int32_t) -1;
+	ao->dnsaddr[1] = (u_int32_t) -1;
+	ao->winsaddr[0] = (u_int32_t) -1;
+	ao->winsaddr[1] = (u_int32_t) -1;
 }
 
 
@@ -1652,7 +1657,7 @@ ipcp_reqci(f, inp, len, reject_if_disagree)
 	    d = citype == CI_MS_DNS2;
 
 	    /* If we do not have a DNS address then we cannot send it */
-	    if (ao->dnsaddr[d] == 0 ||
+	    if (ao->dnsaddr[d] == (u_int32_t) -1 ||
 		cilen != CILEN_ADDR) {	/* Check CI length */
 		orc = CONFREJ;		/* Reject CI */
 		break;
@@ -1672,7 +1677,7 @@ ipcp_reqci(f, inp, len, reject_if_disagree)
 	    d = citype == CI_MS_WINS2;
 
 	    /* If we do not have a WINS address then we cannot send it */
-	    if (ao->winsaddr[d] == 0 ||
+	    if (ao->winsaddr[d] == (u_int32_t) -1 ||
 		cilen != CILEN_ADDR) {	/* Check CI length */
 		orc = CONFREJ;		/* Reject CI */
 		break;
@@ -2326,7 +2331,8 @@ ipcp_printpkt(p, plen, printer, arg)
 	    case CI_MS_WINS2:
 	        p += 2;
 		GETLONG(cilong, p);
-		printer(arg, "ms-wins %I", htonl(cilong));
+		printer(arg, "ms-wins%d %I", (code == CI_MS_WINS1? 1: 2),
+			htonl(cilong));
 		break;
 	    }
 	    while (p < optend) {
