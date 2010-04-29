@@ -813,6 +813,7 @@ extern void (*snoop_send_hook) __P((unsigned char *p, int len));
  * Debug macros.  Slightly useful for finding bugs in pppd, not particularly
  * useful for finding out why your connection isn't being established.
  */
+#define DEBUGALL 1
 #ifdef DEBUGALL
 #define DEBUGMAIN	1
 #define DEBUGFSM	1
