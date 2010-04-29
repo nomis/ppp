@@ -291,12 +291,15 @@ extern char	*welcomer;	/* Script to welcome client after connection */
 extern char	*ptycommand;	/* Command to run on other side of pty */
 extern int	maxconnect;	/* Maximum connect time (seconds) */
 extern char	user[MAXNAMELEN];/* Our name for authenticating ourselves */
+extern char	user2[MAXNAMELEN];/* Our name for authenticating ourselves */
 extern char	passwd[MAXSECRETLEN];	/* Password for PAP or CHAP */
 extern bool	auth_required;	/* Peer is required to authenticate */
 extern bool	persist;	/* Reopen link after it goes down */
 extern bool	uselogin;	/* Use /etc/passwd for checking PAP */
 extern bool	session_mgmt;	/* Do session management (login records) */
 extern char	our_name[MAXNAMELEN];/* Our name for authentication purposes */
+extern char	our_name2[MAXNAMELEN];/* Our name for authentication purposes */
+extern int	use_altname;
 extern char	remote_name[MAXNAMELEN]; /* Peer's name for authentication */
 extern bool	explicit_remote;/* remote_name specified with remotename opt */
 extern bool	demand;		/* Do dial-on-demand */
