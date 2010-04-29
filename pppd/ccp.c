@@ -1650,7 +1650,7 @@ ccp_datainput(unit, pkt, len)
 	     * acknowledgement to a previous reset-request.
 	     */
 	    if (!(ccp_localstate[f->unit] & RACK_PENDING)) {
-		fsm_sdata(f, CCP_RESETREQ, f->reqid = ++f->id, NULL, 0);
+		fsm_sdata(f, CCP_RESETREQ, f->reqid = --f->id, NULL, 0);
 		TIMEOUT(ccp_rack_timeout, f, RACKTIMEOUT);
 		ccp_localstate[f->unit] |= RACK_PENDING;
 	    } else
