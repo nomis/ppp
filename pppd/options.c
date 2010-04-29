@@ -94,6 +94,7 @@ int	debug = 0;		/* Debug flag */
 int	kdebugflag = 0;		/* Tell kernel to print debug messages */
 int	default_device = 1;	/* Using /dev/tty or equivalent */
 char	devnam[MAXPATHLEN];	/* Device name */
+int defaultmetric = 0;		/* Metric of the default route */
 bool	nodetach = 0;		/* Don't detach from controlling tty */
 bool	updetach = 0;		/* Detach once link is up */
 int	maxconnect = 0;		/* Maximum connect time */
@@ -280,6 +281,10 @@ option_t general_options[] = {
     { "child-timeout", o_int, &child_wait,
       "Number of seconds to wait for child processes at exit",
       OPT_PRIO },
+
+    { "defaultmetric", o_int, &defaultmetric,
+      "The metric of the default route",
+      OPT_LIMITS, 0, 32766 },
 
 #ifdef HAVE_MULTILINK
     { "multilink", o_bool, &multilink,
