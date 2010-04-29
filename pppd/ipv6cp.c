@@ -947,7 +947,7 @@ ipv6cp_reqci(f, inp, len, reject_if_disagree)
 	     * then accept it.
 	     */
 	    eui64_get(ifaceid, p);
-	    IPV6CPDEBUG(("(%s)", llv6_ntoa(ifaceid)));
+//	    IPV6CPDEBUG(("(%s)", llv6_ntoa(ifaceid)));
 	    if (eui64_iszero(ifaceid) && eui64_iszero(go->ourid)) {
 		orc = CONFREJ;		/* Reject CI */
 		break;
@@ -1008,7 +1008,7 @@ ipv6cp_reqci(f, inp, len, reject_if_disagree)
 	}
 
 endswitch:
-	IPV6CPDEBUG((" (%s)\n", CODENAME(orc)));
+//	IPV6CPDEBUG((" (%s)\n", CODENAME(orc)));
 
 	if (orc == CONFACK &&		/* Good CI */
 	    rc != CONFACK)		/*  but prior CI wasnt? */
