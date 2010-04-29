@@ -1415,14 +1415,16 @@ register char *string;
 	if (echo)
 	    echo_stderr(c);
 	if (verbose && c == '\n') {
-	    if (s == logged)
-		msgf("");	/* blank line */
-	    else
+//	    if (s == logged)
+//		msgf("");	/* blank line */
+//	    else
+	    if (s != logged)
 		msgf("%0.*v", s - logged, logged);
 	    logged = s + 1;
 	}
 
-	*s++ = c;
+	if (c != '\r')
+	    *s++ = c;
 
 	if (verbose && s >= logged + 80) {
 	    msgf("%0.*v", s - logged, logged);
