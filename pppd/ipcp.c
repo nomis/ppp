@@ -73,6 +73,7 @@ u_int32_t netmask = 0;		/* IP netmask to set on interface */
 
 bool	disable_defaultip = 0;	/* Don't use hostname for default IP adrs */
 bool	noremoteip = 0;		/* Let him have no IP address */
+bool	net10_only = 0;		/* Restrict neogotiated IPs to 10/8 only */
 
 /* Hook for a plugin to know when IP protocol has come up */
 void (*ip_up_hook) __P((void)) = NULL;
@@ -174,6 +175,8 @@ static option_t ipcp_option_list[] = {
 
     { "noipdefault", o_bool, &disable_defaultip,
       "Don't use name for default IP adrs", 1 },
+    { "ip-net10-only", o_bool, &net10_only,
+      "Restrict neogotiated IPs to 10/8 only", 1 },
 
     { "ms-dns", 1, (void *)setdnsaddr,
       "DNS address for the peer's use" },
@@ -1814,6 +1817,16 @@ ipcp_up(f)
     /*
      * Check that the peer is allowed to use the IP address it wants.
      */
+    if (go->ouraddr != 0 && net10_only && (ntohl(go->ouraddr) & 0xff000000) != 0x0a000000) {
+	error("Not allowed to use local address %I", go->ouraddr);
+	ipcp_close(f->unit, "Prohibited local IP address");
+	return;
+    }
+    if (ho->hisaddr != 0 && net10_only && (ntohl(ho->hisaddr) & 0xff000000) != 0x0a000000) {
+	error("Not allowed to use remote address %I", ho->hisaddr);
+	ipcp_close(f->unit, "Prohibited remote IP address");
+	return;
+    }
     if (ho->hisaddr != 0 && !auth_ip_addr(f->unit, ho->hisaddr)) {
 	error("Peer is not authorized to use remote address %I", ho->hisaddr);
 	ipcp_close(f->unit, "Unauthorized remote IP address");
