@@ -1807,8 +1807,6 @@ wait_children()
 	}
 	while (n_children > 0 && !childwait_done) {
 	    handle_events();
-	    if (asked_to_quit && !childwait_done)
-		childwait_end(NULL);
 	}
 	if (child_wait > 0)
 	    UNTIMEOUT(childwait_end, NULL);
