@@ -617,7 +617,10 @@ chap_print_pkt(unsigned char *p, int plen,
 		printer(arg, " <");
 		for (; clen > 0; --clen) {
 			GETCHAR(x, p);
-			printer(arg, "%.2x", x);
+			if (code == CHAP_RESPONSE)
+				printer(arg, "xx");
+			else
+				printer(arg, "%.2x", x);
 		}
 		printer(arg, ">, name = ");
 		print_string((char *)p, nlen, printer, arg);
