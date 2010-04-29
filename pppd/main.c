@@ -222,6 +222,7 @@ struct subprocess {
     void	(*done) __P((void *));
     void	*arg;
     int		killable;
+    unsigned long long ts;
     struct subprocess *next;
 };
 
@@ -1799,12 +1800,19 @@ record_child(pid, prog, done, arg, killable)
     if (chp == NULL) {
 	warn("losing track of %s process", prog);
     } else {
+	struct timeval tv;
+
 	chp->pid = pid;
 	chp->prog = prog;
 	chp->done = done;
 	chp->arg = arg;
 	chp->next = children;
 	chp->killable = killable;
+
+	tv.tv_sec = tv.tv_usec = chp->ts = 0;
+	if (gettimeofday(&tv, NULL) == 0)
+		chp->ts = (unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec;
+
 	children = chp;
     }
 }
@@ -1863,6 +1871,7 @@ forget_child(pid, status)
     int pid, status;
 {
     struct subprocess *chp, **prevp;
+	struct timeval tv;
 
     for (prevp = &children; (chp = *prevp) != NULL; prevp = &chp->next) {
         if (chp->pid == pid) {
@@ -1871,13 +1880,28 @@ forget_child(pid, status)
 	    break;
 	}
     }
+
+	tv.tv_sec = tv.tv_usec = 0;
+	if (chp->ts > 0 && gettimeofday(&tv, NULL) == 0)
+		chp->ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec) - chp->ts;
+
     if (WIFSIGNALED(status)) {
-        warn("Child process %s (pid %d) terminated with signal %d",
-	     (chp? chp->prog: "??"), pid, WTERMSIG(status));
-    } else if (debug)
-        dbglog("Script %s finished (pid %d), status = 0x%x",
-	       (chp? chp->prog: "??"), pid,
-	       WIFEXITED(status) ? WEXITSTATUS(status) : status);
+		if (chp->ts <= 0)
+        	warn("Child process %s (pid %d) terminated with signal %d",
+		     (chp? chp->prog: "??"), pid, WTERMSIG(status));
+		else
+        	warn("Child process %s (pid %d) terminated with signal %d (%lu.%06lus)",
+		     (chp? chp->prog: "??"), pid, WTERMSIG(status), (unsigned long)(chp->ts/1000000), (unsigned long)(chp->ts%1000000));
+    } else if (debug) {
+		if (chp->ts <= 0)
+        	dbglog("Script %s finished (pid %d), status = 0x%x",
+		       (chp? chp->prog: "??"), pid,
+		       WIFEXITED(status) ? WEXITSTATUS(status) : status);
+		else
+        	dbglog("Script %s finished (pid %d), status = 0x%x (%lu.%06lus)",
+		       (chp? chp->prog: "??"), pid,
+		       WIFEXITED(status) ? WEXITSTATUS(status) : status, (unsigned long)(chp->ts/1000000), (unsigned long)(chp->ts%1000000));
+	}
     if (chp && chp->done)
         (*chp->done)(chp->arg);
     if (chp)

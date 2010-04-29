@@ -305,6 +305,8 @@ static void ipcp_script_done __P((void *));
 #define CODENAME(x)	((x) == CONFACK ? "ACK" : \
 			 (x) == CONFNAK ? "NAK" : "REJ")
 
+static unsigned long long ts = 0;
+
 /*
  * This state variable is used to ensure that we don't
  * run an ipcp-up/down script while one is already running.
@@ -1886,8 +1888,20 @@ ipcp_up(f)
     ipcp_options *ho = &ipcp_hisoptions[f->unit];
     ipcp_options *go = &ipcp_gotoptions[f->unit];
     ipcp_options *wo = &ipcp_wantoptions[f->unit];
+	struct timeval tv;
 
-    IPCPDEBUG(("ipcp: up"));
+   	IPCPDEBUG(("ipcp: up"));
+
+	tv.tv_sec = tv.tv_usec = 0;
+//	IPCPDEBUG(("ipcp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned int)(ts/1000000), (unsigned int)(ts%1000000)));
+	if (gettimeofday(&tv, NULL) == 0) {
+		if (ts > 0 && (ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec) - ts) > 0)
+   			info("IPCP was down for %lu.%06lus", (unsigned long)(ts/1000000), (unsigned long)(ts%1000000));
+//		IPCPDEBUG(("ipcp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned int)(ts/1000000), (unsigned int)(ts%1000000)));
+		ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec);
+	} else
+		ts = 0;
+//	IPCPDEBUG(("ipcp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned int)(ts/1000000), (unsigned int)(ts%1000000)));
 
     /*
      * We must have a non-zero IP address for both ends of the link.
@@ -2088,7 +2102,21 @@ static void
 ipcp_down(f)
     fsm *f;
 {
+	struct timeval tv;
+
     IPCPDEBUG(("ipcp: down"));
+
+	tv.tv_sec = tv.tv_usec = 0;
+//	IPCPDEBUG(("ipcp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned long)(ts/1000000), (unsigned long)(ts%1000000)));
+	if (gettimeofday(&tv, NULL) == 0) {
+		if (ts > 0 && (ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec) - ts) > 0)
+   			info("IPCP was up for %lu.%06lus", (unsigned long)(ts/1000000), (unsigned long)(ts%1000000));
+//		IPCPDEBUG(("ipcp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned long)(ts/1000000), (unsigned long)(ts%1000000)));
+		ts = ((unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec);
+	} else
+		ts = 0;
+//	IPCPDEBUG(("ipcp: tv=%u,%u ts=%u,%u", tv.tv_sec, tv.tv_usec, (unsigned long)(ts/1000000), (unsigned long)(ts%1000000)));
+
     /* XXX a bit IPv4-centric here, we only need to get the stats
      * before the interface is marked down. */
     /* XXX more correct: we must get the stats before running the notifiers,
