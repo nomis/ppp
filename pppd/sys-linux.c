@@ -165,6 +165,10 @@ struct in6_ifreq {
 
 #endif /* INET6 */
 
+#ifndef SIOCKILLADDR
+#define SIOCKILLADDR	0x8939
+#endif
+
 /* We can get an EIO error on an ioctl if the modem has hung up */
 #define ok_error(num) ((num)==EIO)
 
@@ -209,6 +213,7 @@ static u_int32_t default_route_gateway;	/* Gateway for default route added */
 static u_int32_t proxy_arp_addr;	/* Addr for proxy arp entry added */
 static char proxy_arp_dev[16];		/* Device for proxy arp entry */
 static u_int32_t our_old_addr;		/* for detecting address changes */
+static u_int32_t our_current_addr;
 static int	dynaddr_set;		/* 1 if ip_dynaddr set */
 static int	looped;			/* 1 if using loop */
 static int	link_mtu;		/* mtu for the link (not bundle) */
@@ -535,6 +540,27 @@ int generic_establish_ppp (int fd)
     close(fd);
  err:
     return -1;
+}
+
+static void do_killaddr(u_int32_t oldaddr)
+{
+    struct ifreq   ifr; 
+
+    memset(&ifr,0,sizeof ifr);
+
+    SET_SA_FAMILY (ifr.ifr_addr,    AF_INET); 
+    SET_SA_FAMILY (ifr.ifr_dstaddr, AF_INET); 
+    SET_SA_FAMILY (ifr.ifr_netmask, AF_INET); 
+    
+    SIN_ADDR(ifr.ifr_addr) = oldaddr;
+
+    strlcpy(ifr.ifr_name, ifname, sizeof (ifr.ifr_name));
+    
+    if(ioctl(sock_fd,SIOCKILLADDR,&ifr) < 0) {
+      if (!ok_error (errno))
+	error("ioctl(SIOCKILLADDR): %m(%d)", errno);
+      return;
+    }
 }
 
 /********************************************************************
@@ -2397,21 +2423,29 @@ int sifaddr (int unit, u_int32_t our_adr, u_int32_t his_adr,
 	}
     }
 
-    /* set ip_dynaddr in demand mode if address changes */
-    if (demand && tune_kernel && !dynaddr_set
-	&& our_old_addr && our_old_addr != our_adr) {
+    if(persist && our_old_addr && our_old_addr != our_adr) {
+
+      if(killoldaddr)
+	do_killaddr(our_old_addr);
+
+	
+      /* set ip_dynaddr in persist mode if address changes */
+      if (tune_kernel && !dynaddr_set) {
 	/* set ip_dynaddr if possible */
 	char *path;
 	int fd;
 
 	path = path_to_procfs("/sys/net/ipv4/ip_dynaddr");
 	if (path != 0 && (fd = open(path, O_WRONLY)) >= 0) {
-	    if (write(fd, "1", 1) != 1)
-		error("Couldn't enable dynamic IP addressing: %m");
-	    close(fd);
+	  if (write(fd, "1", 1) != 1)
+	    error("Couldn't enable dynamic IP addressing: %m");
+	  close(fd);
 	}
 	dynaddr_set = 1;	/* only 1 attempt */
+      }
     }
+
+    our_current_addr = our_adr;
     our_old_addr = 0;
 
     return 1;
@@ -2467,7 +2501,8 @@ int cifaddr (int unit, u_int32_t our_adr, u_int32_t his_adr)
     }
 
     our_old_addr = our_adr;
-
+    our_current_addr = 0;
+    
     return 1;
 }
 
