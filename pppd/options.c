@@ -126,6 +126,9 @@ int maxoctets_dir = 0;       /* default - sum of traffic */
 int maxoctets_timeout = 1;   /* default 1 second */ 
 #endif
 
+char	our_name2[MAXNAMELEN];
+char	user2[MAXNAMELEN];
+int	use_altname = 0;
 
 extern option_t auth_options[];
 extern struct stat devstat;

@@ -357,6 +357,10 @@ option_t auth_options[] = {
       "Set local name for authentication",
       OPT_PRIO | OPT_PRIV | OPT_STATIC, NULL, MAXNAMELEN },
 
+    { "altname", o_string, our_name2,
+      "Set alternative local name for authentication",
+      OPT_PRIO | OPT_PRIV | OPT_STATIC, NULL, MAXNAMELEN },
+
     { "+ua", o_special, (void *)setupapfile,
       "Get PAP user and password from file",
       OPT_PRIO | OPT_A2STRVAL, &uafname },
@@ -364,6 +368,9 @@ option_t auth_options[] = {
     { "user", o_string, user,
       "Set name for auth with peer", OPT_PRIO | OPT_STATIC,
       &explicit_user, MAXNAMELEN },
+
+    { "altuser", o_string, user2,
+      "Set alternative name for auth with peer", OPT_PRIO | OPT_STATIC, NULL, MAXNAMELEN },
 
     { "password", o_string, passwd,
       "Password for authenticating us to the peer",
@@ -766,22 +773,23 @@ link_established(unit)
     }
 
     new_phase(PHASE_AUTHENTICATE);
+    script_setenv("AUTHNAME", use_altname ? our_name2 : our_name, 0);
     auth = 0;
     if (go->neg_eap) {
-	eap_authpeer(unit, our_name);
+	eap_authpeer(unit, use_altname ? our_name2 : our_name);
 	auth |= EAP_PEER;
     } else if (go->neg_chap) {
-	chap_auth_peer(unit, our_name, CHAP_DIGEST(go->chap_mdtype));
+	chap_auth_peer(unit, use_altname ? our_name2 : our_name, CHAP_DIGEST(go->chap_mdtype));
 	auth |= CHAP_PEER;
     } else if (go->neg_upap) {
 	upap_authpeer(unit);
 	auth |= PAP_PEER;
     }
     if (ho->neg_eap) {
-	eap_authwithpeer(unit, user);
+	eap_authwithpeer(unit, use_altname ? user2 : user);
 	auth |= EAP_WITHPEER;
     } else if (ho->neg_chap) {
-	chap_auth_with_peer(unit, user, CHAP_DIGEST(ho->chap_mdtype));
+	chap_auth_with_peer(unit, use_altname ? user2 : user, CHAP_DIGEST(ho->chap_mdtype));
 	auth |= CHAP_WITHPEER;
     } else if (ho->neg_upap) {
 	/* If a blank password was explicitly given as an option, trust
@@ -791,7 +799,7 @@ link_established(unit)
 	    if (!get_pap_passwd(passwd))
 		error("No secret found for PAP login");
 	}
-	upap_authwithpeer(unit, user, passwd);
+	upap_authwithpeer(unit, use_altname ? user2 : user, passwd);
 	auth |= PAP_WITHPEER;
     }
     auth_pending[unit] = auth;
@@ -1242,6 +1250,9 @@ auth_check_options()
 	default_auth = 1;
     }
 
+    if (user2[0] == 0)
+	strlcpy(user2, our_name2, sizeof(user2));
+
     /* If we selected any CHAP flavors, we should probably negotiate it. :-) */
     if (wo->chap_mdtype)
 	wo->neg_chap = 1;
@@ -1272,10 +1283,16 @@ auth_check_options()
     if (!can_auth && (wo->neg_chap || wo->neg_eap)) {
 	can_auth = have_chap_secret((explicit_remote? remote_name: NULL),
 				    our_name, 1, &lacks_ip);
+		if (our_name2[0] != 0)
+			can_auth = can_auth && have_chap_secret((explicit_remote? remote_name: NULL),
+				    our_name2, 1, &lacks_ip);
     }
     if (!can_auth && wo->neg_eap) {
 	can_auth = have_srp_secret((explicit_remote? remote_name: NULL),
 				    our_name, 1, &lacks_ip);
+		if (our_name2[0] != 0)
+			can_auth = can_auth && have_srp_secret((explicit_remote? remote_name: NULL),
+				    our_name2, 1, &lacks_ip);
     }
 
     if (auth_required && !can_auth && noauth_addrs == NULL) {
@@ -1326,27 +1343,27 @@ auth_reset(unit)
     ao->neg_upap = !refuse_pap && (passwd[0] != 0 || get_pap_passwd(NULL));
     ao->neg_chap = (!refuse_chap || !refuse_mschap || !refuse_mschap_v2)
 	&& (passwd[0] != 0 ||
-	    (hadchap = have_chap_secret(user, (explicit_remote? remote_name:
+	    (hadchap = have_chap_secret(use_altname ? user2 : user, (explicit_remote? remote_name:
 					       NULL), 0, NULL)));
     ao->neg_eap = !refuse_eap && (
 	passwd[0] != 0 ||
-	(hadchap == 1 || (hadchap == -1 && have_chap_secret(user,
+	(hadchap == 1 || (hadchap == -1 && have_chap_secret(use_altname ? user2 : user,
 	    (explicit_remote? remote_name: NULL), 0, NULL))) ||
-	have_srp_secret(user, (explicit_remote? remote_name: NULL), 0, NULL));
+	have_srp_secret(use_altname ? user2 : user, (explicit_remote? remote_name: NULL), 0, NULL));
 
     hadchap = -1;
     if (go->neg_upap && !uselogin && !have_pap_secret(NULL))
 	go->neg_upap = 0;
     if (go->neg_chap) {
 	if (!(hadchap = have_chap_secret((explicit_remote? remote_name: NULL),
-			      our_name, 1, NULL)))
+			      use_altname ? our_name2 : our_name, 1, NULL)))
 	    go->neg_chap = 0;
     }
     if (go->neg_eap &&
 	(hadchap == 0 || (hadchap == -1 &&
-	    !have_chap_secret((explicit_remote? remote_name: NULL), our_name,
+	    !have_chap_secret((explicit_remote? remote_name: NULL), use_altname ? our_name2 : our_name,
 		1, NULL))) &&
-	!have_srp_secret((explicit_remote? remote_name: NULL), our_name, 1,
+	!have_srp_secret((explicit_remote? remote_name: NULL), use_altname ? our_name2 : our_name, 1,
 	    NULL))
 	go->neg_eap = 0;
 }
@@ -1420,7 +1437,7 @@ check_passwd(unit, auser, userlen, apasswd, passwdlen, msg)
 
     } else {
 	check_access(f, filename);
-	if (scan_authfile(f, user, our_name, secret, &addrs, &opts, filename, 0) < 0) {
+	if (scan_authfile(f, user, use_altname ? our_name2 : our_name, secret, &addrs, &opts, filename, 0) < 0) {
 	    warn("no PAP secret found for %s", user);
 	} else {
 	    /*
@@ -1516,7 +1533,7 @@ null_login(unit)
 	    return 0;
 	check_access(f, filename);
 
-	i = scan_authfile(f, "", our_name, secret, &addrs, &opts, filename, 0);
+	i = scan_authfile(f, "", use_altname ? our_name2 : our_name, secret, &addrs, &opts, filename, 0);
 	ret = i >= 0 && secret[0] == 0;
 	BZERO(secret, sizeof(secret));
 	fclose(f);
@@ -1552,7 +1569,7 @@ get_pap_passwd(passwd)
      * Check whether a plugin wants to supply this.
      */
     if (pap_passwd_hook) {
-	ret = (*pap_passwd_hook)(user, passwd);
+	ret = (*pap_passwd_hook)(use_altname ? user2 : user, passwd);
 	if (ret >= 0)
 	    return ret;
     }
@@ -1562,7 +1579,7 @@ get_pap_passwd(passwd)
     if (f == NULL)
 	return 0;
     check_access(f, filename);
-    ret = scan_authfile(f, user,
+    ret = scan_authfile(f, use_altname ? user2 : user,
 			(remote_name[0]? remote_name: NULL),
 			secret, NULL, NULL, filename, 0);
     fclose(f);
@@ -1600,7 +1617,7 @@ have_pap_secret(lacks_ipp)
     if (f == NULL)
 	return 0;
 
-    ret = scan_authfile(f, (explicit_remote? remote_name: NULL), our_name,
+    ret = scan_authfile(f, (explicit_remote? remote_name: NULL), use_altname ? our_name2 : our_name,
 			NULL, &addrs, NULL, filename, 0);
     fclose(f);
     if (ret >= 0 && !some_ip_ok(addrs)) {

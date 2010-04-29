@@ -178,6 +178,7 @@ int listen_time;
 int got_sigusr2;
 int got_sigterm;
 int got_sighup;
+int got_sigrtmin;
 
 static sigset_t signals_handled;
 static int waiting;
@@ -260,6 +261,8 @@ void print_link_stats __P((void));
 extern	char	*ttyname __P((int));
 extern	char	*getlogin __P((void));
 int main __P((int, char *[]));
+
+static void toggle_user __P((int));
 
 #ifdef ultrix
 #undef	O_NONBLOCK
@@ -611,7 +614,7 @@ handle_events()
     kill_link = open_ccp_flag = 0;
     if (sigsetjmp(sigjmp, 1) == 0) {
 	sigprocmask(SIG_BLOCK, &signals_handled, NULL);
-	if (got_sighup || got_sigterm || got_sigusr2 || got_sigchld) {
+	if (got_sighup || got_sigterm || got_sigusr2 || got_sigchld || got_sigrtmin) {
 	    sigprocmask(SIG_UNBLOCK, &signals_handled, NULL);
 	} else {
 	    waiting = 1;
@@ -644,6 +647,13 @@ handle_events()
 	open_ccp_flag = 1;
 	got_sigusr2 = 0;
     }
+    if (got_sigrtmin) {
+		got_sigrtmin = 0;
+		if (use_altname)
+			info("Using alternative name");
+		else
+			info("Using primary name");
+	}
 }
 
 /*
@@ -665,6 +675,7 @@ setup_signals()
     sigaddset(&signals_handled, SIGTERM);
     sigaddset(&signals_handled, SIGCHLD);
     sigaddset(&signals_handled, SIGUSR2);
+    sigaddset(&signals_handled, SIGRTMIN);
 
 #define SIGNAL(s, handler)	do { \
 	sa.sa_handler = handler; \
@@ -681,6 +692,7 @@ setup_signals()
 
     SIGNAL(SIGUSR1, toggle_debug);	/* Toggle debug flag */
     SIGNAL(SIGUSR2, open_ccp);		/* Reopen CCP */
+    SIGNAL(SIGRTMIN, toggle_user);	/* Username toggling */
 
     /*
      * Install a handler for other signals which would otherwise
@@ -1509,6 +1521,16 @@ open_ccp(sig)
     if (waiting)
 	siglongjmp(sigjmp, 1);
 }
+
+
+static void
+toggle_user(sig)
+    int sig;
+{
+	got_sigrtmin = 1;
+    use_altname = !use_altname;
+}
+
 
 
 /*
