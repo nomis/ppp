@@ -2351,8 +2351,8 @@ int sifaddr (int unit, u_int32_t our_adr, u_int32_t his_adr,
  *  Set the netmask.
  *  For recent kernels, force the netmask to 255.255.255.255.
  */
-    if (kernel_version >= KVERSION(2,1,16))
-	net_mask = ~0L;
+//    if (kernel_version >= KVERSION(2,1,16))
+//	net_mask = ~0L;
     if (net_mask != 0) {
 	SIN_ADDR(ifr.ifr_netmask) = net_mask;
 	if (ioctl(sock_fd, SIOCSIFNETMASK, (caddr_t) &ifr) < 0) {

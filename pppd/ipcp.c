@@ -69,7 +69,9 @@ ipcp_options ipcp_gotoptions[NUM_PPP];	/* Options that peer ack'd */
 ipcp_options ipcp_allowoptions[NUM_PPP]; /* Options we allow peer to request */
 ipcp_options ipcp_hisoptions[NUM_PPP];	/* Options that we ack'd */
 
-u_int32_t netmask = 0;		/* IP netmask to set on interface */
+u_int32_t netmask = -1;		/* IP netmask to set on interface */
+u_int32_t forcelcl = -1;
+u_int32_t forceptp = -1;
 
 bool	disable_defaultip = 0;	/* Don't use hostname for default IP adrs */
 bool	noremoteip = 0;		/* Let him have no IP address */
@@ -96,6 +98,8 @@ static int ipcp_is_open;		/* haven't called np_finished() */
 static bool ask_for_local;		/* request our address from peer */
 static char vj_value[8];		/* string form of vj option value */
 static char netmask_str[20];		/* string form of netmask value */
+static char forcelcl_str[20];		/* string form of forcelcl value */
+static char forceptp_str[20];		/* string form of forceptp value */
 
 /*
  * Callbacks for fsm code.  (CI = Configuration Information)
@@ -137,6 +141,8 @@ static fsm_callbacks ipcp_callbacks = { /* IPCP callback routines */
 static int setvjslots __P((char **));
 static int setdnsaddr __P((char **));
 static int setwinsaddr __P((char **));
+static int setforcelcl __P((char **));
+static int setforceptp __P((char **));
 static int setnetmask __P((char **));
 int setipaddr __P((char *, char **, int));
 static void printipaddr __P((option_t *, void (*)(void *, char *,...),void *));
@@ -212,6 +218,10 @@ static option_t ipcp_option_list[] = {
 
     { "netmask", o_special, (void *)setnetmask,
       "set netmask", OPT_PRIO | OPT_A2STRVAL | OPT_STATIC, netmask_str },
+    { "forcelcl", o_special, (void *)setforcelcl,
+      "Force set local PTP IP", OPT_PRIO | OPT_A2STRVAL | OPT_STATIC, forcelcl_str },
+    { "forceptp", o_special, (void *)setforceptp,
+      "Force set remote PTP IP", OPT_PRIO | OPT_A2STRVAL | OPT_STATIC, forceptp_str },
 
     { "ipcp-no-addresses", o_bool, &ipcp_wantoptions[0].old_addrs,
       "Disable old-style IP-Addresses usage", OPT_A2CLR,
@@ -514,13 +524,59 @@ setnetmask(argv)
 
     mask = htonl(mask);
 
-    if (n == 0 || p[n] != 0 || (netmask & ~mask) != 0) {
+    if (n == 0 || p[n] != 0 /*|| (netmask & ~mask) != 0*/) {
 	option_error("invalid netmask value '%s'", *argv);
 	return 0;
     }
 
     netmask = mask;
     slprintf(netmask_str, sizeof(netmask_str), "%I", mask);
+
+    return (1);
+}
+
+static int
+setforcelcl(argv)
+    char **argv;
+{
+    u_int32_t ip;
+    struct hostent *hp;
+
+    ip = inet_addr(*argv);
+    if (ip == (u_int32_t) -1) {
+	if ((hp = gethostbyname(*argv)) == NULL) {
+	    option_error("invalid address parameter '%s' for forcelcl option",
+			 *argv);
+	    return 0;
+	}
+	ip = *(u_int32_t *)hp->h_addr;
+    }
+
+    forcelcl = ip;
+    slprintf(forcelcl_str, sizeof(forcelcl_str), "%I", ip);
+
+    return (1);
+}
+
+static int
+setforceptp(argv)
+    char **argv;
+{
+    u_int32_t ip;
+    struct hostent *hp;
+
+    ip = inet_addr(*argv);
+    if (ip == (u_int32_t) -1) {
+	if ((hp = gethostbyname(*argv)) == NULL) {
+	    option_error("invalid address parameter '%s' for forceptp option",
+			 *argv);
+	    return 0;
+	}
+	ip = *(u_int32_t *)hp->h_addr;
+    }
+
+    forceptp = ip;
+    slprintf(forceptp_str, sizeof(forceptp_str), "%I", ip);
 
     return (1);
 }
@@ -1734,7 +1790,7 @@ ip_demand_conf(u)
 	wo->accept_local = 1;
 	ask_for_local = 0;	/* don't tell the peer this address */
     }
-    if (!sifaddr(u, wo->ouraddr, wo->hisaddr, GetMask(wo->ouraddr)))
+    if (!sifaddr(u, forcelcl == -1 ? wo->ouraddr : (forcelcl == 0 ? wo->hisaddr : forcelcl), forceptp == -1 ? wo->hisaddr : (forceptp == 0 ? wo->ouraddr : forceptp), netmask /*GetMask(wo->ouraddr)*/))
 	return 0;
     ipcp_script(_PATH_IPPREUP, 1);
     if (!sifup(u))
@@ -1845,8 +1901,8 @@ ipcp_up(f)
 		script_unsetenv("OLDIPREMOTE");
 
 	    /* Set the interface to the new addresses */
-	    mask = GetMask(go->ouraddr);
-	    if (!sifaddr(f->unit, go->ouraddr, ho->hisaddr, mask)) {
+	    mask = netmask; //GetMask(go->ouraddr);
+	    if (!sifaddr(f->unit, forcelcl == -1 ? go->ouraddr : (forcelcl == 0 ? ho->hisaddr : forcelcl), forceptp == -1 ? ho->hisaddr : (forceptp == 0 ? go->ouraddr : forceptp), mask)) {
 		if (debug)
 		    warn("Interface configuration failed");
 		ipcp_close(f->unit, "Interface configuration failed");
@@ -1871,10 +1927,10 @@ ipcp_up(f)
 	/*
 	 * Set IP addresses and (if specified) netmask.
 	 */
-	mask = GetMask(go->ouraddr);
+	mask = netmask; //GetMask(go->ouraddr);
 
 #if !(defined(SVR4) && (defined(SNI) || defined(__USLC__)))
-	if (!sifaddr(f->unit, go->ouraddr, ho->hisaddr, mask)) {
+	if (!sifaddr(f->unit, forcelcl == -1 ? go->ouraddr : (forcelcl == 0 ? ho->hisaddr : forcelcl), forceptp == -1 ? ho->hisaddr : (forceptp == 0 ? go->ouraddr : forceptp), mask)) {
 	    if (debug)
 		warn("Interface configuration failed");
 	    ipcp_close(f->unit, "Interface configuration failed");
@@ -1894,7 +1950,7 @@ ipcp_up(f)
 	}
 
 #if (defined(SVR4) && (defined(SNI) || defined(__USLC__)))
-	if (!sifaddr(f->unit, go->ouraddr, ho->hisaddr, mask)) {
+	if (!sifaddr(f->unit, forcelcl == -1 ? go->ouraddr : (forcelcl == 0 ? ho->hisaddr : forcelcl), forceptp == -1 ? ho->hisaddr : (forceptp == 0 ? go->ouraddr : forceptp), mask)) {
 	    if (debug)
 		warn("Interface configuration failed");
 	    ipcp_close(f->unit, "Interface configuration failed");
