@@ -82,7 +82,7 @@ fsm_init(f)
 {
     f->state = INITIAL;
     f->flags = 0;
-    f->id = 0;				/* XXX Start with random id? */
+    f->id = 0;
     f->timeouttime = DEFTIMEOUT;
     f->maxconfreqtransmits = DEFMAXCONFREQS;
     f->maxtermtransmits = DEFMAXTERMREQS;
@@ -219,7 +219,7 @@ terminate_layer(f, nextstate)
 
     /* Init restart counter and send Terminate-Request */
     f->retransmits = f->maxtermtransmits;
-    fsm_sdata(f, TERMREQ, f->reqid = ++f->id,
+    fsm_sdata(f, TERMREQ, f->reqid = --f->id,
 	      (u_char *) f->term_reason, f->term_reason_len);
 
     if (f->retransmits == 0) {
@@ -295,7 +295,7 @@ fsm_timeout(arg)
 		(*f->callbacks->finished)(f);
 	} else {
 	    /* Send Terminate-Request */
-	    fsm_sdata(f, TERMREQ, f->reqid = ++f->id,
+	    fsm_sdata(f, TERMREQ, f->reqid = --f->id,
 		      (u_char *) f->term_reason, f->term_reason_len);
 	    TIMEOUT(fsm_timeout, f, f->timeouttime);
 	    --f->retransmits;
@@ -400,7 +400,7 @@ fsm_input(f, inpacket, l)
     default:
 	if( !f->callbacks->extcode
 	   || !(*f->callbacks->extcode)(f, code, id, inp, len) )
-	    fsm_sdata(f, CODEREJ, ++f->id, inpacket, len + HEADERLEN);
+	    fsm_sdata(f, CODEREJ, --f->id, inpacket, len + HEADERLEN);
 	break;
     }
 }
@@ -760,7 +760,7 @@ fsm_sconfreq(f, retransmit)
     if( !retransmit ){
 	/* New request - reset retransmission counter, use new ID */
 	f->retransmits = f->maxconfreqtransmits;
-	f->reqid = ++f->id;
+	f->reqid = --f->id;
     }
 
     f->seen_ack = 0;
