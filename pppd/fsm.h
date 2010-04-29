@@ -143,7 +143,7 @@ typedef struct fsm_callbacks {
 /*
  * Timeouts.
  */
-#define DEFTIMEOUT	3	/* Timeout time in seconds */
+#define DEFTIMEOUT	1	/* Timeout time in seconds */
 #define DEFMAXTERMREQS	2	/* Maximum Terminate-Request transmissions */
 #define DEFMAXCONFREQS	10	/* Maximum Configure-Request transmissions */
 #define DEFMAXNAKLOOPS	5	/* Maximum number of nak loops */
