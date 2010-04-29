@@ -1,11 +1,12 @@
 /*
  * print PPP statistics:
- * 	pppstats [-a|-d] [-v|-r|-z] [-c count] [-w wait] [interface]
+ * 	pppstats [-a|-d] [-v|-r|-s|-z] [-c count] [-w wait] <interface> [interface...]
  *
  *   -a Show absolute values rather than deltas
  *   -d Show data rate (kB/s) rather than bytes
  *   -v Show more stats for VJ TCP header compression
  *   -r Show compression ratio
+ *   -s Show no VJ stats
  *   -z Show compression statistics instead of default display
  *
  * History:
@@ -51,6 +52,7 @@ static const char rcsid[] = "$Id: pppstats.c,v 1.29 2002/10/27 12:56:26 fcusack 
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <time.h>
 
 #ifndef STREAMS
 #if defined(__linux__) && defined(__powerpc__) \
@@ -83,7 +85,7 @@ static const char rcsid[] = "$Id: pppstats.c,v 1.29 2002/10/27 12:56:26 fcusack 
 
 #endif	/* STREAMS */
 
-int	vflag, rflag, zflag;	/* select type of display */
+int	vflag, rflag, sflag, zflag;	/* select type of display */
 int	aflag;			/* print absolute values, not deltas */
 int	dflag;			/* print data rates, not bytes */
 int	interval, count;
@@ -92,7 +94,9 @@ int	unit;
 int	s;			/* socket or /dev/ppp file descriptor */
 int	signalled;		/* set if alarm goes off "early" */
 char	*progname;
-char	*interface;
+char	**interfaces;
+int	numintf;
+#define MAXINTF 16
 
 #if defined(SUNOS4) || defined(ULTRIX) || defined(NeXT)
 extern int optind;
@@ -109,8 +113,8 @@ extern char *optarg;
 
 static void usage __P((void));
 static void catchalarm __P((int));
-static void get_ppp_stats __P((struct ppp_stats *));
-static void get_ppp_cstats __P((struct ppp_comp_stats *));
+static int get_ppp_stats __P((struct ppp_stats *, int));
+static int get_ppp_cstats __P((struct ppp_comp_stats *, int));
 static void intpr __P((void));
 
 int main __P((int, char *argv[]));
@@ -118,7 +122,7 @@ int main __P((int, char *argv[]));
 static void
 usage()
 {
-    fprintf(stderr, "Usage: %s [-a|-d] [-v|-r|-z] [-c count] [-w wait] [interface]\n",
+    fprintf(stderr, "Usage: %s [-a|-d] [-v|-r|-s|-z] [-c count] [-w wait] <interface> [interface...]\n",
 	    progname);
     exit(1);
 }
@@ -136,9 +140,10 @@ catchalarm(arg)
 
 
 #ifndef STREAMS
-static void
-get_ppp_stats(curp)
+static int
+get_ppp_stats(curp, num)
     struct ppp_stats *curp;
+    int num;
 {
     struct ifpppstatsreq req;
 
@@ -150,21 +155,19 @@ get_ppp_stats(curp)
 #define ifr_name ifr__name
 #endif
 
-    strncpy(req.ifr_name, interface, sizeof(req.ifr_name));
+    strncpy(req.ifr_name, interfaces[num], sizeof(req.ifr_name));
     if (ioctl(s, SIOCGPPPSTATS, &req) < 0) {
-	fprintf(stderr, "%s: ", progname);
-	if (errno == ENOTTY)
-	    fprintf(stderr, "kernel support missing\n");
-	else
-	    perror("couldn't get PPP statistics");
-	exit(1);
+	return 0;
     }
+
     *curp = req.stats;
+    return 1;
 }
 
-static void
-get_ppp_cstats(csp)
+static int
+get_ppp_cstats(csp, num)
     struct ppp_comp_stats *csp;
+    int num;
 {
     struct ifpppcstatsreq creq;
 
@@ -176,18 +179,9 @@ get_ppp_cstats(csp)
 #define ifr_name ifr__name
 #endif
 
-    strncpy(creq.ifr_name, interface, sizeof(creq.ifr_name));
+    strncpy(creq.ifr_name, interfaces[num], sizeof(creq.ifr_name));
     if (ioctl(s, SIOCGPPPCSTATS, &creq) < 0) {
-	fprintf(stderr, "%s: ", progname);
-	if (errno == ENOTTY) {
-	    fprintf(stderr, "no kernel compression support\n");
-	    if (zflag)
-		exit(1);
-	    rflag = 0;
-	} else {
-	    perror("couldn't get PPP compression stats");
-	    exit(1);
-	}
+	return 0;
     }
 
 #ifdef __linux__
@@ -213,6 +207,7 @@ get_ppp_cstats(csp)
 #endif
 
     *csp = creq.stats;
+    return 1;
 }
 
 #else	/* STREAMS */
@@ -271,13 +266,13 @@ get_ppp_cstats(csp)
 #endif /* STREAMS */
 
 #define MAX0(a)		((int)(a) > 0? (a): 0)
-#define V(offset)	MAX0(cur.offset - old.offset)
-#define W(offset)	MAX0(ccs.offset - ocs.offset)
+#define V(offset)	MAX0(cur[num].offset - old[num].offset)
+#define W(offset)	MAX0(ccs[num].offset - ocs[num].offset)
 
 #define RATIO(c, i, u)	((c) == 0? 1.0: (u) / ((double)(c) + (i)))
 #define CRATE(x)	RATIO(W(x.comp_bytes), W(x.inc_bytes), W(x.unc_bytes))
 
-#define KBPS(n)		((n) / (interval * 1000.0))
+#define KBPS(n)		((n) / (interval * 1024.0))
 
 /*
  * Print a running summary of interface statistics.
@@ -292,128 +287,206 @@ intpr()
     sigset_t oldmask, mask;
     char *bunit;
     int ratef = 0;
-    struct ppp_stats cur, old;
-    struct ppp_comp_stats ccs, ocs;
+    struct ppp_stats cur[MAXINTF], old[MAXINTF];
+    struct ppp_comp_stats ccs[MAXINTF], ocs[MAXINTF];
+    int ok[MAXINTF], num;
+	struct timespec begin;
+	clock_gettime(CLOCK_REALTIME, &begin);
 
-    memset(&old, 0, sizeof(old));
-    memset(&ocs, 0, sizeof(ocs));
+for (num = 0; num < numintf; num++) {
+    memset(&old[num], 0, sizeof(old[num]));
+    memset(&ocs[num], 0, sizeof(ocs[num]));
+}
 
     while (1) {
-	get_ppp_stats(&cur);
-	if (zflag || rflag)
-	    get_ppp_cstats(&ccs);
+	struct timespec now;
+	clock_gettime(CLOCK_REALTIME, &now);
 
+#if 0
 	(void)signal(SIGALRM, catchalarm);
 	signalled = 0;
 	(void)alarm(interval);
+#endif
+
+for (num = 0; num < numintf; num++) {
+	ok[num] = get_ppp_stats(&cur[num], num);
+	if (zflag || rflag)
+	    ok[num] = ok && get_ppp_cstats(&ccs[num], num);
+	if (!ok[num]) {
+    		memset(&old[num], 0, sizeof(old[num]));
+    		memset(&ocs[num], 0, sizeof(ocs[num]));
+	}
+}
 
 	if ((line % 20) == 0) {
+for (num = 0; num < numintf; num++) {
+	    if (num != 0) { printf(" ⏐ "); }
 	    if (zflag) {
-		printf("IN:  COMPRESSED  INCOMPRESSIBLE   COMP | ");
-		printf("OUT: COMPRESSED  INCOMPRESSIBLE   COMP\n");
-		bunit = dflag? "KB/S": "BYTE";
-		printf("    %s   PACK     %s   PACK  RATIO | ", bunit, bunit);
-		printf("    %s   PACK     %s   PACK  RATIO", bunit, bunit);
+		printf("%91s", interfaces[num]);
+	    } else if (!sflag && !vflag) {
+		printf("%93s", interfaces[num]);
+	    } else if (!sflag && vflag) {
+		printf("%129s", interfaces[num]);
+	    } else if (!rflag) {
+		printf("%39s", interfaces[num]);
 	    } else {
-		printf("%8.8s %6.6s %6.6s",
-		       "IN", "PACK", "VJCOMP");
-
-		if (!rflag)
-		    printf(" %6.6s %6.6s", "VJUNC", "VJERR");
-		if (vflag)
-		    printf(" %6.6s %6.6s", "VJTOSS", "NON-VJ");
-		if (rflag)
-		    printf(" %6.6s %6.6s", "RATIO", "UBYTE");
-		printf("  | %8.8s %6.6s %6.6s",
-		       "OUT", "PACK", "VJCOMP");
-
-		if (!rflag)
-		    printf(" %6.6s %6.6s", "VJUNC", "NON-VJ");
-		if (vflag)
-		    printf(" %6.6s %6.6s", "VJSRCH", "VJMISS");
-		if (rflag)
-		    printf(" %6.6s %6.6s", "RATIO", "UBYTE");
+		printf("%75s", interfaces[num]);
 	    }
+}
 	    putchar('\n');
+	    if (zflag) {
+for (num = 0; num < numintf; num++) {
+		if (num != 0) { printf(" ⏐ "); }
+		printf("IN:      COMPRESSED      INCOMPRESSIBLE   COMP ⎸ ");
+		printf("OUT:     COMPRESSED      INCOMPRESSIBLE   COMP");
+}
+		putchar('\n');
+for (num = 0; num < numintf; num++) {
+		if (num != 0) { printf(" ⏐ "); }
+		bunit = dflag? "KB/S": "BYTE";
+		printf("        %s   PACK         %s   PACK  RATIO ⎸ ", bunit, bunit);
+		printf("        %s   PACK         %s   PACK  RATIO", bunit, bunit);
+}
+		putchar('\n');
+	    } else {
+for (num = 0; num < numintf; num++) {
+		if (num != 0) { printf(" ⏐ "); }
+		if (!sflag)
+		    printf("%9.9s %8.8s %8.8s",
+			   "IN", "PACK", "VJCOMP");
+		else
+		    printf("%9.9s %8.8s",
+			   "IN", "PACK");
+
+		if (!sflag && !rflag)
+		    printf(" %8.8s %8.8s", "VJUNC", "VJERR");
+		if (!sflag && vflag)
+		    printf(" %8.8s %8.8s", "VJTOSS", "NON-VJ");
+		if (rflag)
+		    printf(" %8.8s %8.8s", "RATIO", "UBYTE");
+		if (!sflag)
+		    printf(" ⎸ %9.9s %8.8s %8.8s",
+			   "OUT", "PACK", "VJCOMP");
+		else
+		    printf(" ⎸ %9.9s %8.8s",
+			   "OUT", "PACK");
+
+		if (!sflag && !rflag)
+		    printf(" %8.8s %8.8s", "VJUNC", "NON-VJ");
+		if (!sflag && vflag)
+		    printf(" %8.8s %8.8s", "VJSRCH", "VJMISS");
+		if (rflag)
+		    printf(" %8.8s %8.8s", "RATIO", "UBYTE");
+}
+		putchar('\n');
+	    }
 	}
 
+for (num = 0; num < numintf; num++) {
+        if (num != 0) { printf(" ⏐ "); }
 	if (zflag) {
+if (!ok[num]) {
+	printf("%9s %8s %9s %8s %6s", "-", "-", "-", "-", "-", "-");
+	printf(" ⎸ %9s %8s %9s %8s %6s", "-", "-", "-", "-", "-", "-");
+} else {
 	    if (ratef) {
-		printf("%8.3f %6u %8.3f %6u %6.2f",
+		printf("%9.3f %8u %9.3f %8u %6.2f",
 		       KBPS(W(d.comp_bytes)),
 		       W(d.comp_packets),
 		       KBPS(W(d.inc_bytes)),
 		       W(d.inc_packets),
-		       ccs.d.ratio / 256.0);
-		printf(" | %8.3f %6u %8.3f %6u %6.2f",
+		       ccs[num].d.ratio / 256.0);
+		printf(" ⎸ %9.3f %8u %9.3f %8u %6.2f",
 		       KBPS(W(c.comp_bytes)),
 		       W(c.comp_packets),
 		       KBPS(W(c.inc_bytes)),
 		       W(c.inc_packets),
-		       ccs.c.ratio / 256.0);
+		       ccs[num].c.ratio / 256.0);
 	    } else {
-		printf("%8u %6u %8u %6u %6.2f",
+		printf("%9u %8u %9u %8u %6.2f",
 		       W(d.comp_bytes),
 		       W(d.comp_packets),
 		       W(d.inc_bytes),
 		       W(d.inc_packets),
-		       ccs.d.ratio / 256.0);
-		printf(" | %8u %6u %8u %6u %6.2f",
+		       ccs[num].d.ratio / 256.0);
+		printf(" ⎸ %9u %8u %9u %8u %6.2f",
 		       W(c.comp_bytes),
 		       W(c.comp_packets),
 		       W(c.inc_bytes),
 		       W(c.inc_packets),
-		       ccs.c.ratio / 256.0);
+		       ccs[num].c.ratio / 256.0);
 	    }
-	
+}
 	} else {
+if (!ok[num]) {
+	printf("%9s %8s", "-", "-");
+	if (!sflag) printf(" %8s", "-");
+	if (!sflag && !rflag) printf(" %8s %8s", "-", "-");
+	if (!sflag && vflag) printf(" %8s %8s", "-", "-");
+	if (rflag) printf(" %8s %8s", "-", "-");
+
+	printf(" ⎸ %9s %8s", "-", "-");
+	if (!sflag) printf(" %8s", "-");
+	if (!sflag && !rflag) printf(" %8s %8s", "-", "-");
+	if (!sflag && vflag) printf(" %8s %8s", "-", "-");
+	if (rflag) printf(" %8s %8s", "-", "-");
+} else {
 	    if (ratef)
-		printf("%8.3f", KBPS(V(p.ppp_ibytes)));
+		printf("%9.3f", KBPS(V(p.ppp_ibytes)));
 	    else
-		printf("%8u", V(p.ppp_ibytes));
-	    printf(" %6u %6u",
-		   V(p.ppp_ipackets),
-		   V(vj.vjs_compressedin));
-	    if (!rflag)
-		printf(" %6u %6u",
+		printf("%9u", V(p.ppp_ibytes));
+	    if (!sflag)
+		printf(" %8u %8u",
+		       V(p.ppp_ipackets),
+		       V(vj.vjs_compressedin));
+	    else
+		printf(" %8u",
+		       V(p.ppp_ipackets));
+	    if (!sflag && !rflag)
+		printf(" %8u %8u",
 		       V(vj.vjs_uncompressedin),
 		       V(vj.vjs_errorin));
-	    if (vflag)
-		printf(" %6u %6u",
+	    if (!sflag && vflag)
+		printf(" %8u %8u",
 		       V(vj.vjs_tossed),
 		       V(p.ppp_ipackets) - V(vj.vjs_compressedin)
 		       - V(vj.vjs_uncompressedin) - V(vj.vjs_errorin));
 	    if (rflag) {
-		printf(" %6.2f ", CRATE(d));
+		printf(" %8.2f ", CRATE(d));
 		if (ratef)
-		    printf("%6.2f", KBPS(W(d.unc_bytes)));
+		    printf("%8.2f", KBPS(W(d.unc_bytes)));
 		else
-		    printf("%6u", W(d.unc_bytes));
+		    printf("%8u", W(d.unc_bytes));
 	    }
 	    if (ratef)
-		printf("  | %8.3f", KBPS(V(p.ppp_obytes)));
+		printf(" ⎸ %9.3f", KBPS(V(p.ppp_obytes)));
 	    else
-		printf("  | %8u", V(p.ppp_obytes));
-	    printf(" %6u %6u",
-		   V(p.ppp_opackets),
-		   V(vj.vjs_compressed));
-	    if (!rflag)
-		printf(" %6u %6u",
+		printf(" ⎸ %9u", V(p.ppp_obytes));
+	    if (!sflag)
+		printf(" %8u %8u",
+		       V(p.ppp_opackets),
+		       V(vj.vjs_compressed));
+	    else
+		printf(" %8u",
+		       V(p.ppp_opackets));
+	    if (!sflag && !rflag)
+		printf(" %8u %8u",
 		       V(vj.vjs_packets) - V(vj.vjs_compressed),
 		       V(p.ppp_opackets) - V(vj.vjs_packets));
-	    if (vflag)
-		printf(" %6u %6u",
+	    if (!sflag && vflag)
+		printf(" %8u %8u",
 		       V(vj.vjs_searches),
 		       V(vj.vjs_misses));
 	    if (rflag) {
-		printf(" %6.2f ", CRATE(c));
+		printf(" %8.2f ", CRATE(c));
 		if (ratef)
-		    printf("%6.2f", KBPS(W(c.unc_bytes)));
+		    printf("%8.2f", KBPS(W(c.unc_bytes)));
 		else
-		    printf("%6u", W(c.unc_bytes));
+		    printf("%8u", W(c.unc_bytes));
 	    }
-
+}
 	}
+}
 
 	putchar('\n');
 	fflush(stdout);
@@ -422,7 +495,7 @@ intpr()
 	count--;
 	if (!infinite && !count)
 	    break;
-
+#if 0
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGALRM);
 	sigprocmask(SIG_BLOCK, &mask, &oldmask);
@@ -433,12 +506,21 @@ intpr()
 	sigprocmask(SIG_SETMASK, &oldmask, NULL);
 	signalled = 0;
 	(void)alarm(interval);
+#endif
 
 	if (!aflag) {
-	    old = cur;
-	    ocs = ccs;
+for (num = 0; num < numintf; num++) {
+if (ok[num]) {
+	    old[num] = cur[num];
+	    ocs[num] = ccs[num];
+}
+}
 	    ratef = dflag;
 	}
+
+	now.tv_sec += interval;
+	now.tv_nsec = begin.tv_nsec;
+	clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &now, NULL);
     }
 }
 
@@ -452,13 +534,15 @@ main(argc, argv)
     char *dev;
 #endif
 
+/*
     interface = PPP_DRV_NAME "0";
+*/
     if ((progname = strrchr(argv[0], '/')) == NULL)
 	progname = argv[0];
     else
 	++progname;
 
-    while ((c = getopt(argc, argv, "advrzc:w:")) != -1) {
+    while ((c = getopt(argc, argv, "advrszc:w:")) != -1) {
 	switch (c) {
 	case 'a':
 	    ++aflag;
@@ -471,6 +555,9 @@ main(argc, argv)
 	    break;
 	case 'r':
 	    ++rflag;
+	    break;
+	case 's':
+	    ++sflag;
 	    break;
 	case 'z':
 	    ++zflag;
@@ -506,6 +593,11 @@ main(argc, argv)
     if (argc > 0)
 	interface = argv[0];
 
+    numintf = argc;
+    if (numintf == 0 || numintf > MAXINTF)
+	usage();
+    interfaces = argv;
+
     if (sscanf(interface, PPP_DRV_NAME "%d", &unit) != 1) {
 	fprintf(stderr, "%s: invalid interface '%s' specified\n",
 		progname, interface);
@@ -526,12 +618,14 @@ main(argc, argv)
 #undef  ifr_name
 #define ifr_name ifr_ifrn.ifrn_name
 #endif
+/*
 	strncpy(ifr.ifr_name, interface, sizeof(ifr.ifr_name));
 	if (ioctl(s, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
 	    fprintf(stderr, "%s: nonexistent interface '%s' specified\n",
 		    progname, interface);
 	    exit(1);
 	}
+*/
     }
 
 #else	/* STREAMS */
