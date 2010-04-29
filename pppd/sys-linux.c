@@ -168,6 +168,10 @@ struct in6_ifreq {
 /* We can get an EIO error on an ioctl if the modem has hung up */
 #define ok_error(num) ((num)==EIO)
 
+#if !defined(PPP_DRV_NAME)
+#define PPP_DRV_NAME	"ppp"
+#endif /* !defined(PPP_DRV_NAME) */
+
 static int tty_disc = N_TTY;	/* The TTY discipline */
 static int ppp_disc = N_PPP;	/* The PPP discpline */
 static int initfdflags = -1;	/* Initial file descriptor flags for fd */
@@ -613,7 +617,8 @@ void generic_disestablish_ppp(int dev_fd)
  */
 static int make_ppp_unit()
 {
-	int x, flags;
+	struct ifreq ifr;
+	int x, flags, s;
 
 	if (ppp_dev_fd >= 0) {
 		dbglog("in make_ppp_unit, already had /dev/ppp open?");
@@ -636,6 +641,32 @@ static int make_ppp_unit()
 	}
 	if (x < 0)
 		error("Couldn't create new ppp unit: %m");
+
+	if (use_ifname[0] != 0) {
+		s = socket(PF_INET, SOCK_DGRAM, 0);
+		if (s < 0)
+			s = socket(PF_PACKET, SOCK_DGRAM, 0);
+		if (s < 0)
+			s = socket(PF_INET6, SOCK_DGRAM, 0);
+		if (s < 0)
+			s = socket(PF_UNIX, SOCK_DGRAM, 0);
+		if (s >= 0) {
+			slprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s%d", PPP_DRV_NAME, ifunit);
+			slprintf(ifr.ifr_newname, sizeof(ifr.ifr_newname), "%s", use_ifname);
+			x = ioctl(s, SIOCSIFNAME, &ifr);
+			close(s);
+		} else {
+			x = s;
+		}
+		if (x < 0) {
+			error("Couldn't rename %s to %s", ifr.ifr_name, ifr.ifr_newname);
+			close(ppp_dev_fd);
+			ppp_dev_fd = -1;
+		} else {
+			info("Renamed %s to %s", ifr.ifr_name, ifr.ifr_newname);
+		}
+	}
+
 	return x;
 }
 

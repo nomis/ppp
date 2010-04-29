@@ -737,8 +737,11 @@ void
 set_ifunit(iskey)
     int iskey;
 {
-    info("Using interface %s%d", PPP_DRV_NAME, ifunit);
-    slprintf(ifname, sizeof(ifname), "%s%d", PPP_DRV_NAME, ifunit);
+    if (use_ifname[0] == 0)
+	slprintf(ifname, sizeof(ifname), "%s%d", PPP_DRV_NAME, ifunit);
+    else
+	slprintf(ifname, sizeof(ifname), "%s", use_ifname);
+    info("Using interface %s", ifname);
     script_setenv("IFNAME", ifname, iskey);
     if (iskey) {
 	create_pidfile(getpid());	/* write pid to file */
