@@ -130,6 +130,8 @@ static int
 PPPOEConnectDevice(void)
 {
     struct sockaddr_pppox sp;
+    struct ifreq ifr;
+    int s;
 
     conn->acName = acName;
     conn->serviceName = pppd_pppoe_service;
@@ -163,6 +165,34 @@ PPPOEConnectDevice(void)
 	error("Failed to create PPPoE socket: %m");
 	goto errout;
     }
+
+    /* Update maximum MRU */
+    s = socket(PF_INET, SOCK_DGRAM, 0);
+	if (s < 0)
+    s = socket(PF_PACKET, SOCK_DGRAM, 0);
+	if (s < 0)
+    s = socket(PF_INET6, SOCK_DGRAM, 0);
+	if (s < 0)
+    s = socket(PF_UNIX, SOCK_DGRAM, 0);
+    if (s < 0) {
+	error("Can't get MTU for %s: %m", conn->ifName);
+	close(conn->sessionSocket);
+	goto errout;
+    }
+    strncpy(ifr.ifr_name, conn->ifName, sizeof(ifr.ifr_name));
+    if (ioctl(s, SIOCGIFMTU, &ifr) < 0) {
+	error("Can't get MTU for %s: %m", conn->ifName);
+	close(s);
+	close(conn->sessionSocket);
+	goto errout;
+    }
+    close(s);
+
+    if (lcp_allowoptions[0].mru > ifr.ifr_mtu - 8)
+	lcp_allowoptions[0].mru = ifr.ifr_mtu - 8;
+    if (lcp_wantoptions[0].mru > ifr.ifr_mtu - 8)
+	lcp_wantoptions[0].mru = ifr.ifr_mtu - 8;
+
     sp.sa_family = AF_PPPOX;
     sp.sa_protocol = PX_PROTO_OE;
     sp.sa_addr.pppoe.sid = conn->session;
@@ -170,7 +200,7 @@ PPPOEConnectDevice(void)
     memcpy(sp.sa_addr.pppoe.remote, conn->peerEth, ETH_ALEN);
 
     /* Set remote_number for ServPoET */
-    sprintf(remote_number, "%02X:%02X:%02X:%02X:%02X:%02X",
+    sprintf(remote_number, "%02x:%02x:%02x:%02x:%02x:%02x",
 	    (unsigned) conn->peerEth[0],
 	    (unsigned) conn->peerEth[1],
 	    (unsigned) conn->peerEth[2],
@@ -178,7 +208,7 @@ PPPOEConnectDevice(void)
 	    (unsigned) conn->peerEth[4],
 	    (unsigned) conn->peerEth[5]);
 
-    warn("Connected to %02X:%02X:%02X:%02X:%02X:%02X via interface %s",
+    warn("Connected to %02x:%02x:%02x:%02x:%02x:%02x via interface %s",
 	 (unsigned) conn->peerEth[0],
 	 (unsigned) conn->peerEth[1],
 	 (unsigned) conn->peerEth[2],

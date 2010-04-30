@@ -167,6 +167,13 @@ extern UINT16_t Eth_PPPOE_Session;
 #define IPV4ALEN     4
 #define SMALLBUF   256
 
+/* There are other fixed-size buffers preventing
+   this from being increased to 16110. The buffer
+   sizes would need to be properly de-coupled from
+   the default MRU. For now, getting up to 1500 is
+   enough. */
+#define ETH_JUMBO_LEN 1508
+
 /* A PPPoE Packet, including Ethernet headers */
 typedef struct PPPoEPacketStruct {
     struct ethhdr ethHdr;	/* Ethernet header */
@@ -174,7 +181,7 @@ typedef struct PPPoEPacketStruct {
     unsigned int code:8;	/* PPPoE code */
     unsigned int session:16;	/* PPPoE session */
     unsigned int length:16;	/* Payload length */
-    unsigned char payload[ETH_DATA_LEN]; /* A bit of room to spare */
+    unsigned char payload[ETH_JUMBO_LEN]; /* A bit of room to spare */
 } PPPoEPacket;
 
 #define PPPOE_VER(vt)		((vt) >> 4)
@@ -184,7 +191,7 @@ typedef struct PPPoEPacketStruct {
 /* Header size of a PPPoE packet */
 #define PPPOE_OVERHEAD 6  /* type, code, session, length */
 #define HDR_SIZE (sizeof(struct ethhdr) + PPPOE_OVERHEAD)
-#define MAX_PPPOE_PAYLOAD (ETH_DATA_LEN - PPPOE_OVERHEAD)
+#define MAX_PPPOE_PAYLOAD (ETH_JUMBO_LEN - PPPOE_OVERHEAD)
 #define MAX_PPPOE_MTU (MAX_PPPOE_PAYLOAD - 2)
 
 /* PPPoE Tag */
@@ -192,7 +199,7 @@ typedef struct PPPoEPacketStruct {
 typedef struct PPPoETagStruct {
     unsigned int type:16;	/* tag type */
     unsigned int length:16;	/* Length of payload */
-    unsigned char payload[ETH_DATA_LEN]; /* A LOT of room to spare */
+    unsigned char payload[ETH_JUMBO_LEN]; /* A LOT of room to spare */
 } PPPoETag;
 /* Header size of a PPPoE tag */
 #define TAG_HDR_SIZE 4

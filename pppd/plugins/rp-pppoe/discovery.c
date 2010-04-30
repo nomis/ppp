@@ -509,11 +509,11 @@ waitForPADS(PPPoEConnection *conn, int timeout)
     /* Don't bother with ntohs; we'll just end up converting it back... */
     conn->session = packet.session;
 
-    info("PPP session is %d", (int) ntohs(conn->session));
+    info("PPP session is 0x%04x", (int) ntohs(conn->session));
 
     /* RFC 2516 says session id MUST NOT be zero or 0xFFFF */
     if (ntohs(conn->session) == 0 || ntohs(conn->session) == 0xFFFF) {
-	error("Access concentrator used a session value of %x -- the AC is violating RFC 2516", (unsigned int) ntohs(conn->session));
+	error("Access concentrator used a session value of 0x%04x -- the AC is violating RFC 2516", (unsigned int) ntohs(conn->session));
     }
 }
 

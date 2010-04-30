@@ -81,7 +81,7 @@ etherType(PPPoEPacket *packet)
 {
     UINT16_t type = (UINT16_t) ntohs(packet->ethHdr.h_proto);
     if (type != Eth_PPPOE_Discovery && type != Eth_PPPOE_Session) {
-	fprintf(stderr, "Invalid ether type 0x%x\n", type);
+	fprintf(stderr, "Invalid ether type 0x%04x\n", type);
     }
     return type;
 }
@@ -277,7 +277,7 @@ parsePacket(PPPoEPacket *packet, ParseFunc *func, void *extra)
     }
 
     /* Do some sanity checks on packet */
-    if (len > ETH_DATA_LEN - 6) { /* 6-byte overhead for PPPoE header */
+    if (len > ETH_JUMBO_LEN - PPPOE_OVERHEAD) { /* 6-byte overhead for PPPoE header */
 	fprintf(stderr, "Invalid PPPoE packet length (%u)\n", len);
 	return -1;
     }
