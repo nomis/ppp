@@ -50,6 +50,12 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+
 #include "pppd.h"
 #include "fsm.h"
 #include "lcp.h"
@@ -75,6 +81,7 @@ int	lcp_echo_interval = 0; 	/* Interval between LCP echo-requests */
 int	lcp_echo_fails = 0;	/* Tolerance to unanswered echo-requests */
 bool	lax_recv = 0;		/* accept control chars in asyncmap */
 bool	noendpoint = 0;		/* don't send/accept endpoint discriminator */
+char	*lcp_echo_dev = NULL;	/* Echo monitor device */
 
 static int noopt __P((char **));
 
@@ -151,6 +158,9 @@ static option_t lcp_option_list[] = {
       OPT_PRIO },
     { "lcp-echo-interval", o_int, &lcp_echo_interval,
       "Set time in seconds between LCP echo requests", OPT_PRIO },
+    { "lcp-echo-monitor", o_string, &lcp_echo_dev,
+      "Set echo monitor device",
+      OPT_PRIO | OPT_PRIV },
     { "lcp-restart", o_int, &lcp_fsm[0].timeouttime,
       "Set time in seconds between LCP retransmissions", OPT_PRIO },
     { "lcp-max-terminate", o_int, &lcp_fsm[0].maxtermtransmits,
@@ -196,6 +206,8 @@ lcp_options lcp_hisoptions[NUM_PPP];	/* Options that we ack'd */
 static int lcp_echos_pending = 0;	/* Number of outstanding echo msgs */
 static int lcp_echo_number   = 0;	/* ID number of next echo frame */
 static int lcp_echo_timer_running = 0;  /* set if a timer is running */
+static int lcp_echo_mon_fd = -1;		/* Echo monitor FD */
+static struct sockaddr_in6 lcp_echo_mon_dst;
 
 static u_char nak_buffer[PPP_MRU];	/* where we construct a nak packet */
 
@@ -2306,6 +2318,53 @@ lcp_received_echo_reply (f, id, inp, len)
 	return;
     }
 
+    if (len == 4+2+8+4) {
+	GETSHORT(magic, inp);
+	if (lcp_echo_mon_fd >= 0 && magic == 0x5453) {
+	    struct timeval tv, tvr;
+
+	    tv.tv_sec = tv.tv_usec = 0;
+	    tvr.tv_sec = tvr.tv_usec = 0;
+	    if (gettimeofday(&tv, NULL) == 0) {
+		GETLONG(magic, inp);
+		tvr.tv_sec = (unsigned long)magic << 32;
+		GETLONG(magic, inp);
+		tvr.tv_sec |= magic;
+		GETLONG(magic, inp);
+		tvr.tv_usec = magic;
+
+		if (tvr.tv_sec > tv.tv_sec) {
+		    tv.tv_sec = 0;
+		} else {
+		    tvr.tv_sec = tv.tv_sec - tvr.tv_sec;
+		    if (tvr.tv_usec > tv.tv_usec) {
+			if (tvr.tv_sec == tv.tv_sec)
+			    tv.tv_sec = 0;
+			else {
+			    tvr.tv_sec--;
+			    tvr.tv_usec = (1000000 + tv.tv_usec) - tvr.tv_usec;
+			}
+		    } else
+			tvr.tv_usec = tv.tv_usec - tvr.tv_usec;
+		}
+	    } else {
+		tv.tv_sec = tv.tv_usec = 0;
+	    }
+
+	    if (tv.tv_sec > 0) {
+		char buf[128];
+		int len = 0;
+		len = snprintf(buf, sizeof(buf), "EchoRep %d %s %d %lu.%06u %lu.%06u", f->unit, ifname, lcp_echos_pending, (unsigned long)tv.tv_sec, (unsigned int)tv.tv_usec, (unsigned long)tvr.tv_sec, (unsigned int)tvr.tv_usec);
+
+		if (len > 0 && sendto(lcp_echo_mon_fd, buf, len, MSG_DONTWAIT|MSG_NOSIGNAL, (struct sockaddr*)&lcp_echo_mon_dst, sizeof(lcp_echo_mon_dst)) != len) {
+		    warn("Echo monitor send failure: %m");
+		    close(lcp_echo_mon_fd);
+		    lcp_echo_mon_fd = -1;
+		}
+	    }
+	}
+    }
+
     /* Reset the number of outstanding echo frames */
     lcp_echos_pending = 0;
 }
@@ -2319,7 +2378,8 @@ LcpSendEchoRequest (f)
     fsm *f;
 {
     u_int32_t lcp_magic;
-    u_char pkt[4], *pktp;
+    u_char pkt[4+2+8+4], *pktp;
+    struct timeval tv;
 
     /*
      * Detect the failure of the peer at this point.
@@ -2338,8 +2398,34 @@ LcpSendEchoRequest (f)
         lcp_magic = lcp_gotoptions[f->unit].magicnumber;
 	pktp = pkt;
 	PUTLONG(lcp_magic, pktp);
+
+	if (lcp_echo_mon_fd >= 0) {
+	    tv.tv_sec = tv.tv_usec = 0;
+	    if (gettimeofday(&tv, NULL) == 0) {
+		PUTSHORT(0x5453, pktp);
+		PUTLONG(((unsigned long)tv.tv_sec >> 32) & 0xFFFFFFFF, pktp);
+		PUTLONG((unsigned long)tv.tv_sec & 0xFFFFFFFFL, pktp);
+		PUTLONG(tv.tv_usec, pktp);
+	    } else {
+		tv.tv_sec = tv.tv_usec = 0;
+	    }
+	}
+
         fsm_sdata(f, ECHOREQ, lcp_echo_number++ & 0xFF, pkt, pktp - pkt);
 	++lcp_echos_pending;
+
+	if (lcp_echo_mon_fd >= 0 && tv.tv_sec > 0) {
+	    char buf[128];
+	    int len = 0;
+
+	    len = snprintf(buf, sizeof(buf), "EchoReq %u %s %u %lu.%06u", f->unit, ifname, lcp_echos_pending, (unsigned long)tv.tv_sec, (unsigned int)tv.tv_usec);
+
+	    if (len > 0 && sendto(lcp_echo_mon_fd, buf, len, MSG_DONTWAIT|MSG_NOSIGNAL, (struct sockaddr*)&lcp_echo_mon_dst, sizeof(lcp_echo_mon_dst)) != len) {
+		warn("Echo monitor send failure: %m");
+		close(lcp_echo_mon_fd);
+		lcp_echo_mon_fd = -1;
+	    }
+	}
     }
 }
 
@@ -2357,7 +2443,65 @@ lcp_echo_lowerup (unit)
     lcp_echos_pending      = 0;
     lcp_echo_number        = 0;
     lcp_echo_timer_running = 0;
-  
+
+    if (lcp_echo_dev != NULL) {
+	if (lcp_echo_mon_fd < 0) {
+	    int ifidx, one = 1;
+	    struct sockaddr_in6 src, dst;
+
+	    ifidx = if_nametoindex(lcp_echo_dev);
+	    if (ifidx == 0) {
+		warn("Interface %s for echo monitor does not exist");
+		goto echo_mon_done;
+	    }
+
+	    src.sin6_family = AF_INET6;
+	    src.sin6_addr = in6addr_any;
+	    src.sin6_port = htons(204);
+	    src.sin6_scope_id = 0;
+
+	    dst.sin6_family = AF_INET6;
+	    if (inet_pton(AF_INET6, "FF02:0:0:0:0:0:0:114", &dst.sin6_addr) != 1) {
+		warn("Unable to set up echo monitor group");
+		goto echo_mon_done;
+	    }
+	    dst.sin6_port = htons(1986);
+	    dst.sin6_scope_id = ifidx;
+	    lcp_echo_mon_dst = dst;
+
+	    lcp_echo_mon_fd = socket(PF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+	    if (lcp_echo_mon_fd < 0) {
+		warn("Unable to create echo monitor socket: %m");
+		goto echo_mon_done;
+	    }
+
+	    if (setsockopt(lcp_echo_mon_fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one))) {
+		warn("Unable to set SO_REUSEADDR on echo monitor socket: %m");
+		close(lcp_echo_mon_fd);
+		lcp_echo_mon_fd = -1;
+		goto echo_mon_done;
+	    }
+
+	    if (bind(lcp_echo_mon_fd, (struct sockaddr*)&src, sizeof(src))) {
+		warn("Unable to bind echo monitor socket source port: %m");
+		close(lcp_echo_mon_fd);
+		lcp_echo_mon_fd = -1;
+		goto echo_mon_done;
+	    }
+
+	    if (setsockopt(lcp_echo_mon_fd, SOL_IPV6, IPV6_MULTICAST_IF, &ifidx, sizeof(ifidx))) {
+		warn("Unable to set multicast interface on echo monitor socket: %m");
+		close(lcp_echo_mon_fd);
+		lcp_echo_mon_fd = -1;
+		goto echo_mon_done;
+	    }
+	}
+    } else if (lcp_echo_mon_fd >= 0) {
+	close(lcp_echo_mon_fd);
+	lcp_echo_mon_fd = -1;
+    }
+echo_mon_done:
+
     /* If a timeout interval is specified then start the timer */
     if (lcp_echo_interval != 0)
         LcpEchoCheck (f);
@@ -2376,5 +2520,10 @@ lcp_echo_lowerdown (unit)
     if (lcp_echo_timer_running != 0) {
         UNTIMEOUT (LcpEchoTimeout, f);
         lcp_echo_timer_running = 0;
+    }
+
+    if (lcp_echo_mon_fd >= 0) {
+	close(lcp_echo_mon_fd);
+	lcp_echo_mon_fd = -1;
     }
 }
