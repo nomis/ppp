@@ -2363,7 +2363,7 @@ lcp_received_echo_reply (f, id, inp, len)
 	    if (tv.tv_sec > 0) {
 		char buf[128];
 		int len = 0;
-		len = snprintf(buf, sizeof(buf), "EchoRep %d %s %d %lu.%06u %lu.%06u", f->unit, ifname, lcp_echos_pending, (unsigned long)tv.tv_sec, (unsigned int)tv.tv_usec, (unsigned long)tvr.tv_sec, (unsigned int)tvr.tv_usec);
+		len = snprintf(buf, sizeof(buf), "EchoRep %d %s %d %lu.%06u %lu.%06u", ifunit, ifname, lcp_echos_pending, (unsigned long)tv.tv_sec, (unsigned int)tv.tv_usec, (unsigned long)tvr.tv_sec, (unsigned int)tvr.tv_usec);
 
 		if (len > 0 && sendto(lcp_echo_mon_fd, buf, len, MSG_DONTWAIT|MSG_NOSIGNAL, (struct sockaddr*)&lcp_echo_mon_dst, sizeof(lcp_echo_mon_dst)) != len) {
 		    warn("Echo monitor send failure: %m");
@@ -2427,7 +2427,7 @@ LcpSendEchoRequest (f)
 	    char buf[128];
 	    int len = 0;
 
-	    len = snprintf(buf, sizeof(buf), "EchoReq %u %s %u %lu.%06u", f->unit, ifname, lcp_echos_pending, (unsigned long)tv.tv_sec, (unsigned int)tv.tv_usec);
+	    len = snprintf(buf, sizeof(buf), "EchoReq %u %s %u %lu.%06u", ifunit, ifname, lcp_echos_pending, (unsigned long)tv.tv_sec, (unsigned int)tv.tv_usec);
 
 	    if (len > 0 && sendto(lcp_echo_mon_fd, buf, len, MSG_DONTWAIT|MSG_NOSIGNAL, (struct sockaddr*)&lcp_echo_mon_dst, sizeof(lcp_echo_mon_dst)) != len) {
 		warn("Echo monitor send failure: %m");
