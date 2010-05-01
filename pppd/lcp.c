@@ -2318,6 +2318,15 @@ lcp_received_echo_reply (f, id, inp, len)
 	return;
     }
 
+    /* Handle Huawei modems that prepend the data with our magic number */
+    if (len == 4+4+2+8+4) {
+	GETLONG(magic, inp);
+	if (lcp_gotoptions[f->unit].neg_magicnumber
+	    && magic == lcp_gotoptions[f->unit].magicnumber) {
+	    len -= 4;
+	}
+    }
+
     if (len == 4+2+8+4) {
 	GETSHORT(magic, inp);
 	if (lcp_echo_mon_fd >= 0 && magic == 0x5453) {
