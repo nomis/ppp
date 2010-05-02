@@ -246,6 +246,9 @@ void pppoe_printpkt(PPPoEPacket *packet,
 	case TAG_RELAY_SESSION_ID:
 	    printer(arg, "relay-session-id");
 	    break;
+	case TAG_PPP_MAX_PAYLOAD:
+	    printer(arg, "PPP-max-payload");
+	    break;
 	case TAG_SERVICE_NAME_ERROR:
 	    printer(arg, "service-name-error");
 	    text = 1;
