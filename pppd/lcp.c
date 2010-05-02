@@ -2457,6 +2457,8 @@ lcp_echo_lowerup (unit)
 	if (lcp_echo_mon_fd < 0) {
 	    int ifidx, one = 1;
 	    struct sockaddr_in6 src, dst;
+	    u_int64_t c, hash = 0;
+	    char *tmp = ifname;
 
 	    ifidx = if_nametoindex(lcp_echo_dev);
 	    if (ifidx == 0) {
@@ -2476,6 +2478,16 @@ lcp_echo_lowerup (unit)
 	    }
 	    dst.sin6_port = htons(1986);
 	    dst.sin6_scope_id = ifidx;
+	    while (c = *tmp++)
+		hash = c + (hash << 6) + (hash << 16) - hash;
+	    dst.sin6_addr.__in6_u.__u6_addr8[4] = (hash >> 56) & 0xFF;
+	    dst.sin6_addr.__in6_u.__u6_addr8[5] = (hash >> 48) & 0xFF;
+	    dst.sin6_addr.__in6_u.__u6_addr8[6] = (hash >> 40) & 0xFF;
+	    dst.sin6_addr.__in6_u.__u6_addr8[7] = (hash >> 32) & 0xFF;
+	    dst.sin6_addr.__in6_u.__u6_addr8[8] = (hash >> 24) & 0xFF;
+	    dst.sin6_addr.__in6_u.__u6_addr8[9] = (hash >> 16) & 0xFF;
+	    dst.sin6_addr.__in6_u.__u6_addr8[10] = (hash >> 8) & 0xFF;
+	    dst.sin6_addr.__in6_u.__u6_addr8[11] = hash & 0xFF;
 	    lcp_echo_mon_dst = dst;
 
 	    lcp_echo_mon_fd = socket(PF_INET6, SOCK_DGRAM, IPPROTO_UDP);
