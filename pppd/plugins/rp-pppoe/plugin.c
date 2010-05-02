@@ -133,6 +133,31 @@ PPPOEConnectDevice(void)
     struct ifreq ifr;
     int s;
 
+    /* Update maximum MRU */
+    s = socket(PF_INET, SOCK_DGRAM, 0);
+    if (s < 0)
+	s = socket(PF_PACKET, SOCK_DGRAM, 0);
+    if (s < 0)
+	s = socket(PF_INET6, SOCK_DGRAM, 0);
+    if (s < 0)
+	s = socket(PF_UNIX, SOCK_DGRAM, 0);
+    if (s < 0) {
+	error("Can't get MTU for %s: %m", conn->ifName);
+	goto errout;
+    }
+    strncpy(ifr.ifr_name, conn->ifName, sizeof(ifr.ifr_name));
+    if (ioctl(s, SIOCGIFMTU, &ifr) < 0) {
+	error("Can't get MTU for %s: %m", conn->ifName);
+	close(s);
+	goto errout;
+    }
+    close(s);
+
+    if (lcp_allowoptions[0].mru > ifr.ifr_mtu - 8)
+	lcp_allowoptions[0].mru = ifr.ifr_mtu - 8;
+    if (lcp_wantoptions[0].mru > ifr.ifr_mtu - 8)
+	lcp_wantoptions[0].mru = ifr.ifr_mtu - 8;
+
     conn->acName = acName;
     conn->serviceName = pppd_pppoe_service;
     strlcpy(ppp_devnam, devnam, sizeof(ppp_devnam));
@@ -165,33 +190,6 @@ PPPOEConnectDevice(void)
 	error("Failed to create PPPoE socket: %m");
 	goto errout;
     }
-
-    /* Update maximum MRU */
-    s = socket(PF_INET, SOCK_DGRAM, 0);
-	if (s < 0)
-    s = socket(PF_PACKET, SOCK_DGRAM, 0);
-	if (s < 0)
-    s = socket(PF_INET6, SOCK_DGRAM, 0);
-	if (s < 0)
-    s = socket(PF_UNIX, SOCK_DGRAM, 0);
-    if (s < 0) {
-	error("Can't get MTU for %s: %m", conn->ifName);
-	close(conn->sessionSocket);
-	goto errout;
-    }
-    strncpy(ifr.ifr_name, conn->ifName, sizeof(ifr.ifr_name));
-    if (ioctl(s, SIOCGIFMTU, &ifr) < 0) {
-	error("Can't get MTU for %s: %m", conn->ifName);
-	close(s);
-	close(conn->sessionSocket);
-	goto errout;
-    }
-    close(s);
-
-    if (lcp_allowoptions[0].mru > ifr.ifr_mtu - 8)
-	lcp_allowoptions[0].mru = ifr.ifr_mtu - 8;
-    if (lcp_wantoptions[0].mru > ifr.ifr_mtu - 8)
-	lcp_wantoptions[0].mru = ifr.ifr_mtu - 8;
 
     sp.sa_family = AF_PPPOX;
     sp.sa_protocol = PX_PROTO_OE;

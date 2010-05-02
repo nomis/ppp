@@ -14,6 +14,8 @@ static char const RCSID[] =
 #define _GNU_SOURCE 1
 #include "pppoe.h"
 #include "pppd/pppd.h"
+#include "pppd/fsm.h"
+#include "pppd/lcp.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -259,6 +261,19 @@ sendPADI(PPPoEConnection *conn)
 	plen += sizeof(pid) + TAG_HDR_SIZE;
     }
 
+    /* Add our maximum MRU */
+    {
+	PPPoETag maxPayload;
+	UINT16_t mru = htons(lcp_allowoptions[0].mru);
+	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
+	maxPayload.length = htons(sizeof(mru));
+	memcpy(maxPayload.payload, &mru, sizeof(mru));
+	CHECK_ROOM(cursor, packet.payload, sizeof(mru) + TAG_HDR_SIZE);
+	memcpy(cursor, &maxPayload, sizeof(mru) + TAG_HDR_SIZE);
+	cursor += sizeof(mru) + TAG_HDR_SIZE;
+	plen += sizeof(mru) + TAG_HDR_SIZE;
+    }
+
     packet.length = htons(plen);
 
     sendPacket(conn, conn->discoverySocket, &packet, (int) (plen + HDR_SIZE));
@@ -411,6 +426,19 @@ sendPADR(PPPoEConnection *conn)
 	memcpy(cursor, &hostUniq, sizeof(pid) + TAG_HDR_SIZE);
 	cursor += sizeof(pid) + TAG_HDR_SIZE;
 	plen += sizeof(pid) + TAG_HDR_SIZE;
+    }
+
+    /* Add our maximum MRU */
+    {
+	PPPoETag maxPayload;
+	UINT16_t mru = htons(lcp_allowoptions[0].mru);
+	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
+	maxPayload.length = htons(sizeof(mru));
+	memcpy(maxPayload.payload, &mru, sizeof(mru));
+	CHECK_ROOM(cursor, packet.payload, sizeof(mru) + TAG_HDR_SIZE);
+	memcpy(cursor, &maxPayload, sizeof(mru) + TAG_HDR_SIZE);
+	cursor += sizeof(mru) + TAG_HDR_SIZE;
+	plen += sizeof(mru) + TAG_HDR_SIZE;
     }
 
     /* Copy cookie and relay-ID if needed */
