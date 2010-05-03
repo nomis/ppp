@@ -114,6 +114,9 @@ PPPOEInitDevice(void)
     conn->useHostUniq = 1;
     conn->printACNames = printACNames;
     conn->discoveryTimeout = PADI_TIMEOUT;
+    /* Save configuration */
+    conn->mtu = lcp_allowoptions[0].mru;
+    conn->mru = lcp_wantoptions[0].mru;
     return 1;
 }
 
@@ -132,6 +135,10 @@ PPPOEConnectDevice(void)
     struct sockaddr_pppox sp;
     struct ifreq ifr;
     int s;
+
+    /* Restore configuration */
+    lcp_allowoptions[0].mru = conn->mtu;
+    lcp_wantoptions[0].mru = conn->mru;
 
     /* Update maximum MRU */
     s = socket(PF_INET, SOCK_DGRAM, 0);
