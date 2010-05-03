@@ -242,6 +242,7 @@ typedef struct PPPoEConnectionStruct {
     int error;			/* Error packet received */
     int debug;			/* Set to log packets sent and received */
     int discoveryTimeout;       /* Timeout for discovery packets */
+    int seenMaxPayload;
     int mtu;			/* Stored MTU */
     int mru;			/* Stored MRU */
 } PPPoEConnection;
@@ -253,7 +254,6 @@ struct PacketCriteria {
     int serviceNameOK;
     int seenACName;
     int seenServiceName;
-    int seenMaxPayload;
 };
 
 /* Function Prototypes */
