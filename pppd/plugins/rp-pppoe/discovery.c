@@ -328,7 +328,7 @@ waitForPADO(PPPoEConnection *conn, int timeout)
     pc.serviceNameOK = (conn->serviceName) ? 0 : 1;
     pc.seenACName    = 0;
     pc.seenServiceName = 0;
-    pc.seenMaxPayload = 0;
+    conn->seenMaxPayload = 0;
     conn->error = 0;
 
     do {
