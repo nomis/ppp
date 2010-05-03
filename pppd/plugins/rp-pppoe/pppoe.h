@@ -194,6 +194,7 @@ typedef struct PPPoEPacketStruct {
 #define HDR_SIZE (sizeof(struct ethhdr) + PPPOE_OVERHEAD)
 #define MAX_PPPOE_PAYLOAD (ETH_JUMBO_LEN - PPPOE_OVERHEAD)
 #define MAX_PPPOE_MTU (MAX_PPPOE_PAYLOAD - 2)
+#define ETH_PPPOE_MTU (ETH_DATA_LEN - PPPOE_OVERHEAD - 2)
 
 /* PPPoE Tag */
 
@@ -252,6 +253,7 @@ struct PacketCriteria {
     int serviceNameOK;
     int seenACName;
     int seenServiceName;
+    int seenMaxPayload;
 };
 
 /* Function Prototypes */

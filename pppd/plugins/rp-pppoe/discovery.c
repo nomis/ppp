@@ -151,6 +151,7 @@ parsePADOTags(UINT16_t type, UINT16_t len, unsigned char *data,
 		lcp_allowoptions[0].mru = mru;
 	    if (lcp_wantoptions[0].mru > mru)
 		lcp_wantoptions[0].mru = mru;
+	    conn->seenMaxPayload = 1;
 	}
 	break;
     case TAG_SERVICE_NAME_ERROR:
@@ -198,6 +199,7 @@ parsePADSTags(UINT16_t type, UINT16_t len, unsigned char *data,
 		lcp_allowoptions[0].mru = mru;
 	    if (lcp_wantoptions[0].mru > mru)
 		lcp_wantoptions[0].mru = mru;
+	    conn->seenMaxPayload = 1;
 	}
 	break;
     case TAG_SERVICE_NAME_ERROR:
@@ -284,7 +286,7 @@ sendPADI(PPPoEConnection *conn)
     }
 
     /* Add our maximum MTU/MRU */
-    if (MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru) != 1492) {
+    if (MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru) > ETH_PPPOE_MTU) {
 	PPPoETag maxPayload;
 	UINT16_t mru = htons(MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru));
 	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
@@ -326,6 +328,7 @@ waitForPADO(PPPoEConnection *conn, int timeout)
     pc.serviceNameOK = (conn->serviceName) ? 0 : 1;
     pc.seenACName    = 0;
     pc.seenServiceName = 0;
+    pc.seenMaxPayload = 0;
     conn->error = 0;
 
     do {
@@ -451,7 +454,7 @@ sendPADR(PPPoEConnection *conn)
     }
 
     /* Add our maximum MTU/MRU */
-    if (MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru) != 1492) {
+    if (MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru) > ETH_PPPOE_MTU) {
 	PPPoETag maxPayload;
 	UINT16_t mru = htons(MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru));
 	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
@@ -615,6 +618,14 @@ discovery(PPPoEConnection *conn)
 	waitForPADS(conn, timeout);
 	timeout *= 2;
     } while (conn->discoveryState == STATE_SENT_PADR);
+
+    if (!conn->seenMaxPayload) {
+	/* RFC 4638: MUST limit MTU/MRU to 1492 */
+	if (lcp_allowoptions[0].mru > ETH_PPPOE_MTU)
+	    lcp_allowoptions[0].mru = ETH_PPPOE_MTU;
+	if (lcp_wantoptions[0].mru > ETH_PPPOE_MTU)
+	    lcp_wantoptions[0].mru = ETH_PPPOE_MTU;
+    }
 
     /* We're done. */
     conn->discoveryState = STATE_SESSION;
