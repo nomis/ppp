@@ -147,6 +147,8 @@ parsePADOTags(UINT16_t type, UINT16_t len, unsigned char *data,
 	if (len == sizeof(mru)) {
 	    memcpy(&mru, data, sizeof(mru));
 	    mru = ntohs(mru);
+	    if (lcp_allowoptions[0].mru > mru)
+		lcp_allowoptions[0].mru = mru;
 	    if (lcp_wantoptions[0].mru > mru)
 		lcp_wantoptions[0].mru = mru;
 	}
@@ -192,6 +194,8 @@ parsePADSTags(UINT16_t type, UINT16_t len, unsigned char *data,
 	if (len == sizeof(mru)) {
 	    memcpy(&mru, data, sizeof(mru));
 	    mru = ntohs(mru);
+	    if (lcp_allowoptions[0].mru > mru)
+		lcp_allowoptions[0].mru = mru;
 	    if (lcp_wantoptions[0].mru > mru)
 		lcp_wantoptions[0].mru = mru;
 	}
@@ -279,10 +283,10 @@ sendPADI(PPPoEConnection *conn)
 	plen += sizeof(pid) + TAG_HDR_SIZE;
     }
 
-    /* Add our maximum MRU */
-    if (lcp_allowoptions[0].mru != 1492) {
+    /* Add our maximum MTU/MRU */
+    if (MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru) != 1492) {
 	PPPoETag maxPayload;
-	UINT16_t mru = htons(lcp_allowoptions[0].mru);
+	UINT16_t mru = htons(MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru));
 	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
 	maxPayload.length = htons(sizeof(mru));
 	memcpy(maxPayload.payload, &mru, sizeof(mru));
@@ -446,10 +450,10 @@ sendPADR(PPPoEConnection *conn)
 	plen += sizeof(pid) + TAG_HDR_SIZE;
     }
 
-    /* Add our maximum MRU */
-    if (lcp_allowoptions[0].mru != 1492) {
+    /* Add our maximum MTU/MRU */
+    if (MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru) != 1492) {
 	PPPoETag maxPayload;
-	UINT16_t mru = htons(lcp_allowoptions[0].mru);
+	UINT16_t mru = htons(MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru));
 	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
 	maxPayload.length = htons(sizeof(mru));
 	memcpy(maxPayload.payload, &mru, sizeof(mru));
