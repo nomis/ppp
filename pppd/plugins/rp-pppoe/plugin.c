@@ -115,8 +115,8 @@ PPPOEInitDevice(void)
     conn->printACNames = printACNames;
     conn->discoveryTimeout = PADI_TIMEOUT;
     /* Save configuration */
-    conn->mtu = lcp_allowoptions[0].mru;
-    conn->mru = lcp_wantoptions[0].mru;
+    conn->mtu = MIN(lcp_allowoptions[0].mru, MAX_PPPOE_MTU);
+    conn->mru = MIN(lcp_wantoptions[0].mru, MAX_PPPOE_MTU);
     return 1;
 }
 
