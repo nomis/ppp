@@ -112,6 +112,7 @@ parsePADOTags(UINT16_t type, UINT16_t len, unsigned char *data,
 {
     struct PacketCriteria *pc = (struct PacketCriteria *) extra;
     PPPoEConnection *conn = pc->conn;
+    UINT16_t mru;
     int i;
 
     switch(type) {
@@ -141,6 +142,14 @@ parsePADOTags(UINT16_t type, UINT16_t len, unsigned char *data,
 	conn->relayId.type = htons(type);
 	conn->relayId.length = htons(len);
 	memcpy(conn->relayId.payload, data, len);
+	break;
+    case TAG_PPP_MAX_PAYLOAD:
+	if (len == sizeof(mru)) {
+	    memcpy(&mru, data, sizeof(mru));
+	    mru = ntohs(mru);
+	    if (lcp_wantoptions[0].mru > mru)
+		lcp_wantoptions[0].mru = mru;
+	}
 	break;
     case TAG_SERVICE_NAME_ERROR:
 	error("PADO: Service-Name-Error: %.*s", (int) len, data);
@@ -174,9 +183,18 @@ parsePADSTags(UINT16_t type, UINT16_t len, unsigned char *data,
 	      void *extra)
 {
     PPPoEConnection *conn = (PPPoEConnection *) extra;
+    UINT16_t mru;
     switch(type) {
     case TAG_SERVICE_NAME:
 	dbglog("PADS: Service-Name: '%.*s'", (int) len, data);
+	break;
+    case TAG_PPP_MAX_PAYLOAD:
+	if (len == sizeof(mru)) {
+	    memcpy(&mru, data, sizeof(mru));
+	    mru = ntohs(mru);
+	    if (lcp_wantoptions[0].mru > mru)
+		lcp_wantoptions[0].mru = mru;
+	}
 	break;
     case TAG_SERVICE_NAME_ERROR:
 	error("PADS: Service-Name-Error: %.*s", (int) len, data);
@@ -262,7 +280,7 @@ sendPADI(PPPoEConnection *conn)
     }
 
     /* Add our maximum MRU */
-    {
+    if (lcp_allowoptions[0].mru != 1492) {
 	PPPoETag maxPayload;
 	UINT16_t mru = htons(lcp_allowoptions[0].mru);
 	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
@@ -429,7 +447,7 @@ sendPADR(PPPoEConnection *conn)
     }
 
     /* Add our maximum MRU */
-    {
+    if (lcp_allowoptions[0].mru != 1492) {
 	PPPoETag maxPayload;
 	UINT16_t mru = htons(lcp_allowoptions[0].mru);
 	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
