@@ -114,9 +114,6 @@ PPPOEInitDevice(void)
     conn->useHostUniq = 1;
     conn->printACNames = printACNames;
     conn->discoveryTimeout = PADI_TIMEOUT;
-    /* Save configuration */
-    conn->mtu = MIN(lcp_allowoptions[0].mru, MAX_PPPOE_MTU);
-    conn->mru = MIN(lcp_wantoptions[0].mru, MAX_PPPOE_MTU);
     return 1;
 }
 
@@ -415,6 +412,10 @@ void pppoe_check_options(void)
 	lcp_allowoptions[0].mru = MAX_PPPOE_MTU;
     if (lcp_wantoptions[0].mru > MAX_PPPOE_MTU)
 	lcp_wantoptions[0].mru = MAX_PPPOE_MTU;
+
+    /* Save configuration */
+    conn->mtu = lcp_allowoptions[0].mru;
+    conn->mru = lcp_wantoptions[0].mru;
 
     ccp_allowoptions[0].deflate = 0;
     ccp_wantoptions[0].deflate = 0;
