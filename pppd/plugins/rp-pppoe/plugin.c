@@ -138,7 +138,7 @@ PPPOEConnectDevice(void)
     lcp_wantoptions[0].mru = conn->mru;
 
     /* Update maximum MRU */
-    s = socket(PF_INET, SOCK_DGRAM, 0);
+    s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0) {
 	error("Can't get MTU for %s: %m", conn->ifName);
 	goto errout;
