@@ -151,10 +151,10 @@ PPPOEConnectDevice(void)
     }
     close(s);
 
-    if (lcp_allowoptions[0].mru > ifr.ifr_mtu - 8)
-	lcp_allowoptions[0].mru = ifr.ifr_mtu - 8;
-    if (lcp_wantoptions[0].mru > ifr.ifr_mtu - 8)
-	lcp_wantoptions[0].mru = ifr.ifr_mtu - 8;
+    if (lcp_allowoptions[0].mru > ifr.ifr_mtu - TOTAL_OVERHEAD)
+	lcp_allowoptions[0].mru = ifr.ifr_mtu - TOTAL_OVERHEAD;
+    if (lcp_wantoptions[0].mru > ifr.ifr_mtu - TOTAL_OVERHEAD)
+	lcp_wantoptions[0].mru = ifr.ifr_mtu - TOTAL_OVERHEAD;
 
     conn->acName = acName;
     conn->serviceName = pppd_pppoe_service;

@@ -193,8 +193,10 @@ typedef struct PPPoEPacketStruct {
 #define PPPOE_OVERHEAD 6  /* type, code, session, length */
 #define HDR_SIZE (sizeof(struct ethhdr) + PPPOE_OVERHEAD)
 #define MAX_PPPOE_PAYLOAD (ETH_JUMBO_LEN - PPPOE_OVERHEAD)
-#define MAX_PPPOE_MTU (MAX_PPPOE_PAYLOAD - 2)
-#define ETH_PPPOE_MTU (ETH_DATA_LEN - PPPOE_OVERHEAD - 2)
+#define PPP_OVERHEAD 2  /* protocol */
+#define MAX_PPPOE_MTU (MAX_PPPOE_PAYLOAD - PPP_OVERHEAD)
+#define TOTAL_OVERHEAD (PPPOE_OVERHEAD + PPP_OVERHEAD)
+#define ETH_PPPOE_MTU (ETH_DATA_LEN - TOTAL_OVERHEAD)
 
 /* PPPoE Tag */
 
