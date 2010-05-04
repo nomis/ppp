@@ -147,11 +147,13 @@ parsePADOTags(UINT16_t type, UINT16_t len, unsigned char *data,
 	if (len == sizeof(mru)) {
 	    memcpy(&mru, data, sizeof(mru));
 	    mru = ntohs(mru);
-	    if (lcp_allowoptions[0].mru > mru)
-		lcp_allowoptions[0].mru = mru;
-	    if (lcp_wantoptions[0].mru > mru)
-		lcp_wantoptions[0].mru = mru;
-	    conn->seenMaxPayload = 1;
+	    if (mru >= ETH_PPPOE_MTU) {
+		if (lcp_allowoptions[0].mru > mru)
+		    lcp_allowoptions[0].mru = mru;
+		if (lcp_wantoptions[0].mru > mru)
+		    lcp_wantoptions[0].mru = mru;
+		conn->seenMaxPayload = 1;
+	    }
 	}
 	break;
     case TAG_SERVICE_NAME_ERROR:
@@ -195,11 +197,13 @@ parsePADSTags(UINT16_t type, UINT16_t len, unsigned char *data,
 	if (len == sizeof(mru)) {
 	    memcpy(&mru, data, sizeof(mru));
 	    mru = ntohs(mru);
-	    if (lcp_allowoptions[0].mru > mru)
-		lcp_allowoptions[0].mru = mru;
-	    if (lcp_wantoptions[0].mru > mru)
-		lcp_wantoptions[0].mru = mru;
-	    conn->seenMaxPayload = 1;
+	    if (mru >= ETH_PPPOE_MTU) {
+		if (lcp_allowoptions[0].mru > mru)
+		    lcp_allowoptions[0].mru = mru;
+		if (lcp_wantoptions[0].mru > mru)
+		    lcp_wantoptions[0].mru = mru;
+		conn->seenMaxPayload = 1;
+	    }
 	}
 	break;
     case TAG_SERVICE_NAME_ERROR:
