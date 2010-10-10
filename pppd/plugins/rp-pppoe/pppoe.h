@@ -148,10 +148,10 @@ extern UINT16_t Eth_PPPOE_Session;
 #define STATE_TERMINATED    4
 
 /* How many PADI/PADS attempts? */
-#define MAX_PADI_ATTEMPTS 3
+#define MAX_PADI_ATTEMPTS 15
 
 /* Initial timeout for PADO/PADS */
-#define PADI_TIMEOUT 5
+#define PADI_TIMEOUT 1
 
 /* States for scanning PPP frames */
 #define STATE_WAITFOR_FRAME_ADDR 0
