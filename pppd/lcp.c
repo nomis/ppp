@@ -209,6 +209,7 @@ static int lcp_echo_number   = 0;	/* ID number of next echo frame */
 static int lcp_echo_timer_running = 0;  /* set if a timer is running */
 static int lcp_echo_mon_fd = -1;		/* Echo monitor FD */
 static struct sockaddr_in6 lcp_echo_mon_dst;
+static struct timeval lcp_echo_mon_tv[256]; /* Echo timestamps */
 
 static u_char nak_buffer[PPP_MRU];	/* where we construct a nak packet */
 
@@ -2310,39 +2311,27 @@ lcp_received_echo_reply (f, id, inp, len)
     /* Check the magic number - don't count replies from ourselves. */
     if (len < 4) {
 	dbglog("lcp: received short Echo-Reply, length %d", len);
+	lcp_echo_mon_tv[id & 0xFF].tv_sec = 0;
+	lcp_echo_mon_tv[id & 0xFF].tv_usec = 0;
 	return;
     }
     GETLONG(magic, inp);
     if (lcp_gotoptions[f->unit].neg_magicnumber
 	&& magic == lcp_gotoptions[f->unit].magicnumber) {
 	warn("appear to have received our own echo-reply!");
+	lcp_echo_mon_tv[id & 0xFF].tv_sec = 0;
+	lcp_echo_mon_tv[id & 0xFF].tv_usec = 0;
 	return;
     }
 
-    /* Handle Huawei modems that prepend the data with our magic number */
-    if (len == 4+4+2+8+4) {
-	GETLONG(magic, inp);
-	if (lcp_gotoptions[f->unit].neg_magicnumber
-	    && magic == lcp_gotoptions[f->unit].magicnumber) {
-	    len -= 4;
-	}
-    }
-
-    if (len == 4+2+8+4) {
-	GETSHORT(magic, inp);
-	if (lcp_echo_mon_fd >= 0 && magic == 0x5453) {
+    if (lcp_echo_mon_tv[id & 0xFF].tv_sec != 0) {
+	if (lcp_echo_mon_fd >= 0) {
 	    struct timeval tv, tvr;
 
 	    tv.tv_sec = tv.tv_usec = 0;
-	    tvr.tv_sec = tvr.tv_usec = 0;
-	    if (gettimeofday(&tv, NULL) == 0) {
-		GETLONG(magic, inp);
-		tvr.tv_sec = (unsigned long)magic << 32;
-		GETLONG(magic, inp);
-		tvr.tv_sec |= magic;
-		GETLONG(magic, inp);
-		tvr.tv_usec = magic;
+	    tvr = lcp_echo_mon_tv[id & 0xFF];
 
+	    if (gettimeofday(&tv, NULL) == 0) {
 		if (tvr.tv_sec > tv.tv_sec) {
 		    tv.tv_sec = 0;
 		} else {
@@ -2374,6 +2363,8 @@ lcp_received_echo_reply (f, id, inp, len)
 	    }
 	}
     }
+    lcp_echo_mon_tv[id & 0xFF].tv_sec = 0;
+    lcp_echo_mon_tv[id & 0xFF].tv_usec = 0;
 
     /* Reset the number of outstanding echo frames */
     lcp_echos_pending = 0;
@@ -2388,9 +2379,8 @@ LcpSendEchoRequest (f)
     fsm *f;
 {
     u_int32_t lcp_magic;
-    u_char pkt[4+2+8+4], *pktp;
-    struct timeval tv;
-
+    u_char pkt[4], *pktp;
+    struct timeval tv = { 0, 0 };
     /*
      * Detect the failure of the peer at this point.
      */
@@ -2410,16 +2400,10 @@ LcpSendEchoRequest (f)
 	PUTLONG(lcp_magic, pktp);
 
 	if (lcp_echo_mon_fd >= 0) {
-	    tv.tv_sec = tv.tv_usec = 0;
-	    if (gettimeofday(&tv, NULL) == 0) {
-		PUTSHORT(0x5453, pktp);
-		PUTLONG(((unsigned long)tv.tv_sec >> 32) & 0xFFFFFFFF, pktp);
-		PUTLONG((unsigned long)tv.tv_sec & 0xFFFFFFFFL, pktp);
-		PUTLONG(tv.tv_usec, pktp);
-	    } else {
-		tv.tv_sec = tv.tv_usec = 0;
-	    }
+	    if (gettimeofday(&tv, NULL) != 0)
+		    tv.tv_sec = tv.tv_usec = 0;
 	}
+	lcp_echo_mon_tv[lcp_echo_number & 0xFF] = tv;
 
         fsm_sdata(f, ECHOREQ, lcp_echo_number++ & 0xFF, pkt, pktp - pkt);
 	++lcp_echos_pending;
@@ -2453,6 +2437,7 @@ lcp_echo_lowerup (unit)
     lcp_echos_pending      = 0;
     lcp_echo_number        = 0;
     lcp_echo_timer_running = 0;
+    memset(lcp_echo_mon_tv, 0, sizeof(lcp_echo_mon_tv));
 
     if (lcp_echo_dev != NULL) {
 	if (lcp_echo_mon_fd < 0) {
