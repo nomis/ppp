@@ -49,6 +49,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include <arpa/inet.h>
 #include <net/if.h>
@@ -2478,7 +2479,7 @@ lcp_echo_lowerup (unit)
 	    }
 	    dst.sin6_port = htons(1986);
 	    dst.sin6_scope_id = ifidx;
-	    while (c = *tmp++)
+	    while ((c = *tmp++))
 		hash = c + (hash << 6) + (hash << 16) - hash;
 	    dst.sin6_addr.__in6_u.__u6_addr8[4] = (hash >> 56) & 0xFF;
 	    dst.sin6_addr.__in6_u.__u6_addr8[5] = (hash >> 48) & 0xFF;
